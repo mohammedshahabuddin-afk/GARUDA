@@ -486,7 +486,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
               </div>
               <div style="margin-bottom:5px">
                 <label style="font-size:10px;font-weight:800;color:#475569;display:block;margin-bottom:3px;letter-spacing:.5px">🔑 PASSWORD</label>
-                <input id="gate_pwd" type="password" placeholder="Enter password" style="width:100%;padding:8px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12.5px;box-sizing:border-box;background:#f8fafc" onkeypress="if(event.key===&apos;Enter&apos;)window.__doLogin()" autocomplete="current-password">
+                <span style="position:relative;display:block"><input id="gate_pwd" type="password" placeholder="Enter password" style="width:100%;padding:8px 40px 8px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12.5px;box-sizing:border-box;background:#f8fafc" onkeypress="if(event.key===&apos;Enter&apos;)window.__doLogin()" autocomplete="current-password"><span onclick="window.__togglePwd('gate_pwd',this)" title="Show / hide password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:15px;line-height:1;padding:4px;user-select:none;opacity:.6">👁</span></span>
               </div>
               <div style="font-size:10px;color:#64748b;margin-bottom:5px">💡 First login? Default: <b style="color:#dc2626">Honasa@123</b></div>
               <div id="gate_err" style="color:#dc2626;font-size:11px;font-weight:700;min-height:15px;margin:1px 0;text-align:center"></div>
@@ -538,11 +538,11 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
     <input type="hidden" id="pwd_change_old">
     <div style="margin-bottom:10px">
       <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px">🆕 New Password (min 6 chars)</label>
-      <input id="pwd_change_new" type="password" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box">
+      <span style="position:relative;display:block"><input id="pwd_change_new" type="password" style="width:100%;padding:10px 42px 10px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box"><span onclick="window.__togglePwd('pwd_change_new',this)" title="Show / hide password" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;line-height:1;padding:4px;user-select:none;opacity:.6">👁</span></span>
     </div>
     <div style="margin-bottom:10px">
       <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px">✅ Confirm New Password</label>
-      <input id="pwd_change_confirm" type="password" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box">
+      <span style="position:relative;display:block"><input id="pwd_change_confirm" type="password" style="width:100%;padding:10px 42px 10px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box"><span onclick="window.__togglePwd('pwd_change_confirm',this)" title="Show / hide password" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;line-height:1;padding:4px;user-select:none;opacity:.6">👁</span></span>
     </div>
     <div style="margin-bottom:10px;padding:10px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd">
       <label style="font-size:12px;font-weight:700;color:#0369a1;display:block;margin-bottom:6px">🌐 Preferred Language (Bhasha Chunein)</label>
@@ -582,11 +582,11 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
     </div>
     <div style="margin-bottom:10px">
       <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px">🆕 New Password</label>
-      <input id="forgot_newpwd" type="password" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box">
+      <span style="position:relative;display:block"><input id="forgot_newpwd" type="password" style="width:100%;padding:10px 42px 10px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box"><span onclick="window.__togglePwd('forgot_newpwd',this)" title="Show / hide password" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;line-height:1;padding:4px;user-select:none;opacity:.6">👁</span></span>
     </div>
     <div style="margin-bottom:10px">
       <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px">✅ Confirm Password</label>
-      <input id="forgot_confirm" type="password" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box">
+      <span style="position:relative;display:block"><input id="forgot_confirm" type="password" style="width:100%;padding:10px 42px 10px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box"><span onclick="window.__togglePwd('forgot_confirm',this)" title="Show / hide password" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;line-height:1;padding:4px;user-select:none;opacity:.6">👁</span></span>
     </div>
     <div id="forgot_err" style="color:#dc2626;font-size:12px;font-weight:600;min-height:16px;margin:6px 0"></div>
     <div style="display:flex;gap:8px">
@@ -8901,10 +8901,20 @@ function tadaFillClaimDesigDropdown(){
     for(var i=0;i<all.length;i++){
       if(String(all[i].email||"").trim().toLowerCase()===e){
         for(var k in patch){all[i][k]=patch[k];}
+        all[i].lastUpdated=new Date().toISOString(); // stamp so remote merge keeps the newest
         found=true;break;
       }
     }
-    if(found)loginSaveAll(all);
+    if(found){
+      loginSaveAll(all);
+      // ── SYNC FIX ──────────────────────────────────────────────────────────
+      // Push the change up to Google Sheets so a new/changed password (or admin
+      // reset / set / status toggle) actually persists everywhere instead of
+      // living only in this device's localStorage. Fire-and-forget: the sync
+      // module queues it offline and drains the queue BEFORE the next pull, so
+      // the change can never be silently overwritten by a background pull.
+      try{ if(window.__sync&&window.__sync.pushLoginUser){ window.__sync.pushLoginUser(e); } }catch(_e){}
+    }
     return found;
   }
 
@@ -9931,28 +9941,24 @@ function tadaFillClaimDesigDropdown(){
   var MASTER_KEY_CANDIDATES=["me_em_master_v3","me_em_master_v2","me_em_master_v1","me_em_master"];
 
   // ─── Status UI ─────────────────────────────────────────────
+  // Sync is fully automatic (immediate on every action + silent background pull),
+  // so there is no visible/clickable sync chip. We keep a hidden element only so
+  // the many setStatus() calls have a harmless target and never throw.
   function ensureStatusChip(){
-    if(document.getElementById("sync_chip"))return document.getElementById("sync_chip");
-    var chip=document.createElement("div");
+    var chip=document.getElementById("sync_chip");
+    if(chip)return chip;
+    chip=document.createElement("div");
     chip.id="sync_chip";
-    chip.style.cssText="position:fixed;top:8px;right:8px;z-index:9998;padding:4px 10px;border-radius:20px;font-size:10.5px;font-weight:700;background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;box-shadow:0 2px 6px rgba(0,0,0,.08);cursor:pointer;user-select:none;display:none";
-    chip.onclick=function(){window.__sync&&window.__sync.pullNow();};
-    chip.title="Click to sync now";
+    chip.style.cssText="display:none!important";
     (document.body||document.documentElement).appendChild(chip);
     return chip;
   }
   function setStatus(mode,text){
+    // No-op UI: keep the last status as text on a hidden node (for debugging only).
     var c=ensureStatusChip();
-    var colors={
-      synced:{bg:"#dcfce7",fg:"#166534",border:"#86efac"},
-      syncing:{bg:"#fef3c7",fg:"#92400e",border:"#fcd34d"},
-      offline:{bg:"#fee2e2",fg:"#991b1b",border:"#fca5a5"},
-      idle:{bg:"#e0f2fe",fg:"#075985",border:"#7dd3fc"}
-    };
-    var cc=colors[mode]||colors.idle;
-    c.style.background=cc.bg;c.style.color=cc.fg;c.style.borderColor=cc.border;
-    c.textContent=text;
-    c.style.display="";
+    c.setAttribute("data-status",mode||"");
+    c.textContent=text||"";
+    c.style.display="none";
   }
 
   // ─── Queue mgmt ─────────────────────────────────────────────
@@ -10089,6 +10095,47 @@ function tadaFillClaimDesigDropdown(){
     }).catch(function(err){enqueue(payload);return {ok:false,error:String(err),queued:true};});
   }
 
+  // ─── Push ONE login/user row (password change, admin set/reset, status) ─────
+  // Backend tab = "LoginConfig" (same name the pull returns), upsert key = Email.
+  // Called by the auth module's loginUpdateUser() after any local change.
+  function pushLoginUser(email){
+    var e=String(email||"").trim().toLowerCase();
+    if(!e)return Promise.resolve({ok:false,error:"no email"});
+    var all;
+    try{all=JSON.parse(localStorage.getItem(LOGIN_KEY)||"[]");}catch(_e){all=[];}
+    var u=null;
+    for(var i=0;i<all.length;i++){if(String(all[i].email||"").trim().toLowerCase()===e){u=all[i];break;}}
+    // No local record → nothing safe to push (never upsert a blank-column row).
+    if(!u)return Promise.resolve({ok:false,error:"user not found locally"});
+    var row={
+      Code:u.code||"",Name:u.name||"",HQ:u.hq||"",Zone:u.zone||"",
+      Designation:u.desig||"",Mobile:String(u.mob||""),Email:u.email||e,
+      Password:String(u.pwd||""),Rights:u.rights||"Employee",Status:u.status||"Active",
+      PwdChanged:!!u.pwdChanged,LastUpdated:u.lastUpdated||new Date().toISOString()
+    };
+    setStatus("syncing","🔐 Saving login…");
+    // When there is no active session yet (e.g. a FORCED first-login password
+    // change happens before login completes), pushRows would bail with "no email"
+    // and drop the change. Send it directly, tagged with the user's own email as
+    // actor, and queue it if it does not confirm — so a new password is never lost.
+    if(!currentUserEmail()){
+      var pl={action:"push",email:e,sheet:"LoginConfig",rows:[row],upsertKey:"Email"};
+      return httpPost(pl).then(function(res){
+        if(res&&res.ok){setStatus("synced","🔐 Login saved · "+timeShort());}
+        else{enqueue(pl);setStatus("offline","⚠️ Login change queued");}
+        return res;
+      }).catch(function(err){enqueue(pl);setStatus("offline","⚠️ Login change queued");return {ok:false,error:String(err),queued:true};});
+    }
+    return pushRows("LoginConfig",[row],"Email").then(function(res){
+      if(res&&res.ok)setStatus("synced","🔐 Login saved · "+timeShort());
+      else setStatus("offline","⚠️ Login change queued");
+      return res;
+    }).catch(function(err){
+      setStatus("offline","⚠️ Login change queued");
+      return {ok:false,error:String(err),queued:true};
+    });
+  }
+
   // ─── Drain queue when back online ───────────────────────────
   function drainQueue(){
     var q=loadQueue();if(!q.length)return Promise.resolve({ok:true,drained:0});
@@ -10130,12 +10177,26 @@ function tadaFillClaimDesigDropdown(){
   // PERF: Track user activity + page visibility to defer sync during interaction.
   var _lastScrollTs = 0;
   var _syncPaused = false;
+  var _lastFocusSyncTs = 0;
+  // Immediate-feeling sync: refresh when the user opens/returns to the app, so
+  // incoming changes (admin resets, master updates, other devices) show up right
+  // away instead of waiting for the background interval. Throttled to once/20s.
+  function syncOnFocus(){
+    if(!isSyncEnabled()||!navigator.onLine)return;
+    if(!currentUserEmail())return;
+    if(Date.now()-_lastFocusSyncTs < 20000)return;
+    _lastFocusSyncTs = Date.now();
+    drainQueue().then(function(){pullAll();});
+  }
   if (typeof window !== "undefined") {
     window.addEventListener("scroll", function(){ _lastScrollTs = Date.now(); }, {passive:true});
     window.addEventListener("touchmove", function(){ _lastScrollTs = Date.now(); }, {passive:true});
     document.addEventListener("visibilitychange", function(){
       _syncPaused = document.hidden;
+      if(!document.hidden) syncOnFocus();     // app came to foreground → sync now
     });
+    window.addEventListener("focus", syncOnFocus);
+    window.addEventListener("pageshow", syncOnFocus); // back/forward cache restore
   }
   function shouldSkipSync(){
     if (_syncPaused) return true;                          // tab hidden
@@ -10381,6 +10442,7 @@ function tadaFillClaimDesigDropdown(){
     url:SYNC_URL,
     pullNow:pullAll,
     push:pushRows,
+    pushLoginUser:pushLoginUser,
     replaceSheet:replaceSheetRemote,
     drain:drainQueue,
     setEnabled:setSyncEnabled,
@@ -10420,6 +10482,14 @@ function tadaFillClaimDesigDropdown(){
   else{setTimeout(boot,100);}
 })();
 /* ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Show / hide password toggle (eye icon) — global, used by inline onclick ── */
+window.__togglePwd=function(id,el){
+  var inp=document.getElementById(id);
+  if(!inp)return;
+  if(inp.type==="password"){inp.type="text";if(el){el.textContent="🙈";el.style.opacity="1";}}
+  else{inp.type="password";if(el){el.textContent="👁";el.style.opacity=".6";}}
+};
 
 </script>
 
