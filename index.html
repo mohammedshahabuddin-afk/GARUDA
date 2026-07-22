@@ -9640,7 +9640,13 @@ function tadaFillClaimDesigDropdown(){
           }
           localStorage.setItem("me_em_role","admin");
         }catch(e){}
+        // CRITICAL: flip the app-wide workflow-gating flag. Every inline action gate
+        // (plan-first checks, mandatory photos) and workflowLevel() read window.__BYPASS
+        // (uppercase). Without this, tabs looked open but the chain gating + "save plan
+        // first" blocks still fired, so the user could not freely use tabs / see own data.
+        try{window.__BYPASS=true;}catch(e){}
         renderBypassBanner(true,cfg);
+        try{if(typeof updateNavLocks==="function")updateNavLocks();}catch(e){}
         return true;
       }
     }
@@ -9652,7 +9658,10 @@ function tadaFillClaimDesigDropdown(){
         localStorage.removeItem("me_em_role_true");
       }
     }catch(e){}
+    // Bypass OFF → restore restricted chain-flow: re-enable all workflow gating.
+    try{window.__BYPASS=false;}catch(e){}
     renderBypassBanner(false,cfg);
+    try{if(typeof updateNavLocks==="function")updateNavLocks();}catch(e){}
     return false;
   }
 
@@ -10437,6 +10446,100 @@ function tadaFillClaimDesigDropdown(){
     };
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════
+     📸 PHOTO → GOOGLE DRIVE PIPELINE
+     Photos are captured as base64 and, until now, lived ONLY in this device's
+     localStorage (the sheet just stored a "Yes/No" flag). This uploads each
+     photo to Drive — folder layout = Root / DD-MM-YYYY / Person Name, created
+     on the backend — and logs the returned link into a "Photos" sheet, so the
+     image lives in Drive and its link lives in our sheet.
+     It wraps the REAL save choke points (soSave / nsSave / saSaveAll /
+     reqSaveAll / piSaveAll) so it fires on every add, and tracks already-
+     uploaded photos so nothing is re-uploaded. Fully self-contained — it does
+     not touch the existing master/login/transactional sync.
+     ═══════════════════════════════════════════════════════════════════════ */
+  var PHOTO_ROOT_FOLDER_ID="1-is1xwB9so_wztw0GOnwJ-7UiXOw_-8g";
+  var PHOTO_SYNCED_KEY="me_em_photo_synced_v1";
+  function photoSyncedLoad(){try{return JSON.parse(localStorage.getItem(PHOTO_SYNCED_KEY)||"{}");}catch(e){return {};}}
+  function photoSyncedSave(m){try{localStorage.setItem(PHOTO_SYNCED_KEY,JSON.stringify(m));}catch(e){}}
+
+  // Which record fields hold a photo, per module → human slot label (filename + sheet).
+  var PHOTO_FIELDS={
+    "Secondary Order":{photoStore:"Store-Board",photoDisplay:"Display"},
+    "New Store":{front:"Outlet-Front",inside:"Inside-Display"},
+    "POSM Audit":{displayPhoto:"Display",storePhoto:"Store",insidePhoto:"Inside",outsidePhoto:"Outside"},
+    "POSM Requirement":{photoA:"Inside-Shop",photoB:"Outside-ShopName"},
+    "POSM Install":{beforePhoto:"Before",afterPhoto:"After"}
+  };
+
+  // Upload ONE base64 photo → returns Promise<url|""> ("" on any failure).
+  function uploadOnePhoto(dataUrl,meta){
+    if(!dataUrl||String(dataUrl).indexOf("data:")!==0)return Promise.resolve("");
+    var email=currentUserEmail();if(!email)return Promise.resolve("");
+    var payload={action:"uploadPhoto",email:email,rootFolderId:PHOTO_ROOT_FOLDER_ID,
+      date:fmtDDMMYYYY(meta.date),person:meta.person||"",slot:meta.slot||"photo",
+      filename:meta.filename||"",dataUrl:dataUrl};
+    return httpPost(payload).then(function(res){return (res&&res.ok&&res.url)?res.url:"";}).catch(function(){return "";});
+  }
+
+  // Scan a saved list; upload any not-yet-synced photos; log each link to "Photos".
+  // Sequential (one at a time) to stay gentle on mobile + Apps Script quotas.
+  function syncPhotos(module,list){
+    if(!isSyncEnabled())return;
+    if(!currentUserEmail())return;
+    var map=PHOTO_FIELDS[module];if(!map||!list||!list.length)return;
+    var synced=photoSyncedLoad();
+    var chain=Promise.resolve();
+    list.forEach(function(r){
+      if(!r||!r.id)return;
+      Object.keys(map).forEach(function(field){
+        var img=r[field];
+        if(!img||String(img).indexOf("data:")!==0)return;   // no photo in this slot
+        var slot=map[field];
+        var key=r.id+"_"+slot;
+        if(synced[key])return;                               // already uploaded — skip
+        chain=chain.then(function(){
+          return uploadOnePhoto(img,{date:r.date,person:r.emp||r.code||"",slot:slot,filename:key}).then(function(url){
+            if(!url)return;                                  // failed → stays unsynced, retried on next save/poll
+            return pushRows("Photos",[{
+              Key:key,Date:fmtDDMMYYYY(r.date),EmpCode:r.code||"",Employee:r.emp||"",
+              Module:module,StoreName:r.storeName||"",CompanyCode:String(r.companyCode||r.clientId||""),
+              Slot:slot,DriveUrl:url,RecordId:r.id,Ts:r.ts||""
+            }],"Key").then(function(res){
+              if(res&&res.ok){synced[key]=url;photoSyncedSave(synced);}
+            });
+          });
+        });
+      });
+    });
+    chain.catch(function(){});
+  }
+  window.__syncPhotosNow=syncPhotos;   // exposed for manual/back-fill triggers
+
+  // Modules → real persistence fn + its localStorage key (used as fallback reader).
+  var PHOTO_HOOKS=[
+    {fn:"soSave",     module:"Secondary Order", key:"me_em_secorders_v1"},
+    {fn:"nsSave",     module:"New Store",       key:"me_em_newstores_v1"},
+    {fn:"saSaveAll",  module:"POSM Audit",      key:"me_em_storeaudit_v1"},
+    {fn:"reqSaveAll", module:"POSM Requirement",key:"me_em_posmreq_v1"},
+    {fn:"piSaveAll",  module:"POSM Install",    key:"me_em_posm_install_v1"}
+  ];
+  function readList(k){try{return JSON.parse(localStorage.getItem(k)||"[]");}catch(e){return [];}}
+  function installPhotoHooks(){
+    PHOTO_HOOKS.forEach(function(h){
+      var orig=window[h.fn];
+      if(typeof orig!=="function"||orig.__photoWrapped)return;
+      var wrapped=function(list){
+        var out=orig.apply(this,arguments);
+        var arr=Array.isArray(list)?list:readList(h.key);
+        setTimeout(function(){try{syncPhotos(h.module,arr);}catch(e){}},600);
+        return out;
+      };
+      wrapped.__photoWrapped=true;
+      window[h.fn]=wrapped;
+    });
+  }
+
   // ─── Public API ─────────────────────────────────────────
   window.__sync={
     url:SYNC_URL,
@@ -10448,8 +10551,10 @@ function tadaFillClaimDesigDropdown(){
     setEnabled:setSyncEnabled,
     isEnabled:isSyncEnabled,
     queue:loadQueue,
+    syncPhotos:syncPhotos,
+    photoRootFolderId:PHOTO_ROOT_FOLDER_ID,
     lastSync:function(){try{return localStorage.getItem(LAST_SYNC_KEY);}catch(e){return null;}},
-    version:"1.0"
+    version:"1.1"
   };
 
   // ─── Boot ─────────────────────────────────────────────
@@ -10475,7 +10580,11 @@ function tadaFillClaimDesigDropdown(){
       hookNewStoreSave();
       hookSaSave();
       hookReqSave();
+      installPhotoHooks();
     },500);
+    // Persistence fns may be (re)assigned after the app finishes loading; re-install
+    // the photo wrappers a moment later so we never miss the real save function.
+    setTimeout(function(){try{installPhotoHooks();}catch(e){}},2500);
     scheduleBackground();
   }
   if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",boot);}
