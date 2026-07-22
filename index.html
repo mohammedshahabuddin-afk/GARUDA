@@ -1151,7 +1151,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
         <div class="card"><h2><span class="dot"></span>Photo Evidence</h2>
           <div class="hint" style="margin-bottom:6px">Display photo (jo POSM laga hai) &amp; Store photo.</div>
           <div class="row2" id="sa_photos"></div>
-          <button class="btn btn-navy" style="margin-top:12px" onclick="saSave()">✅ Save &amp; Proceed to EOD</button>
+          <button class="btn btn-navy" style="margin-top:12px" onclick="saSave()">💾 Save Store Audit</button>
           <div id="sa_out"></div>
         </div>
       </div>
@@ -1159,7 +1159,9 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
         <div class="card"><h2><span class="dot"></span>Store Photos <span class="hint">(POSM not installed)</span></h2>
           <div class="hint" style="margin-bottom:6px">Store ka Inside &amp; Outside (Shop Name) photo capture karo.</div>
           <div class="row2" id="sa_no_photos"></div>
-          <button class="btn btn-navy" style="margin-top:12px" onclick="saNoSave()">✅ Save &amp; Proceed to EOD</button>
+          <label class="hint" style="margin-top:10px">Reason <span class="hint">(POSM kyun nahi laga — zaroori)</span></label>
+          <textarea id="sa_no_reason" rows="2" style="width:100%;box-sizing:border-box;resize:vertical" placeholder="Reason POSM is not installed at this store"></textarea>
+          <button class="btn btn-navy" style="margin-top:12px" onclick="saNoSave()">💾 Save (Not Installed)</button>
           <div id="sa_no_out"></div>
         </div>
       </div>
@@ -1189,7 +1191,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
           <div class="card"><h2><span class="dot"></span>Photos</h2>
             <div class="hint" id="req_photo_hint" style="margin-bottom:6px"></div>
             <div class="row2" id="req_photos"></div>
-            <button class="btn btn-navy" style="margin-top:12px" onclick="reqSave()">✅ Save & Continue</button>
+            <button class="btn btn-navy" style="margin-top:12px" onclick="reqSave()">💾 Save Requirement</button>
             <div id="req_out"></div>
           </div>
         </div>
@@ -1200,6 +1202,12 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
         </div>
         <div id="req_list"></div>
       </div>
+    </div>
+
+    <!-- ============ Store-complete action bar (both sub-tabs) ============ -->
+    <div id="posm_action_bar" class="card" style="display:none;border-left:4px solid #2f9e57">
+      <div class="note" style="margin:0 0 10px">✅ Is store ka POSM save ho gaya. Ab agla store karo, ya din khatam karke EOD par jao. <span class="hint">(Store complete hone par data sheet par sync hoga)</span></div>
+      <div class="row2"><button class="btn btn-ghost" onclick="posmNextStore()">➡️ Next Store (Field)</button><button class="btn btn-navy" onclick="posmProceedEod()">🌙 Save &amp; Proceed to EOD</button></div>
     </div>
   </section>
 
@@ -2618,16 +2626,27 @@ function saveEod(){
   if(!name){toast("Select an employee");return;}
   if(!date){toast("Pick a date");return;}
   var e=empObj(name);var db=load();var id=recId(name,date);var r=db[id]||{};
+  // Once EOD is saved the day is CLOSED \u2014 no edits (admin/HOD can still override).
+  if(r.eodLocked&&!fullAccess()){toast("\ud83d\udd12 EOD already saved \u2014 din band ho chuka, edit nahi ho sakta");return;}
+  if(typeof confirm!=="undefined"&&!fullAccess()&&!confirm("EOD save karein? Iske baad din CLOSE ho jayega \u2014 koi edit nahi hoga."))return;
   r.date=date;r.zone=e?e.zone:"";r.employee=name;r.hq=e?e.hq:"";r.code=e?(e.code||""):(r.code||"");
   r.town=elv("e_town").trim()||r.town||"";
   r.workingWith=elv("e_ww").trim()||"Self";
   r.sc=num(elv("e_sc"))||r.sc||0;r.tc=num(elv("e_tc"));r.pc=num(elv("e_pc"));
   r.sec={};BRANDS.forEach(function(b){r.sec[b]=num(elv("e_val_"+b));});
   r.msl=num(elv("e_msl"));r.nso=num(elv("e_nso"));r.posm=num(elv("e_posm"));r.remarks=elv("e_remarks").trim();
-  r.eodTime=nowTime();r.eodDone=true;
-  db[id]=r;save(db);toast("EOD saved \u2713");
+  r.eodTime=nowTime();r.eodDone=true;r.eodLocked=true;
+  db[id]=r;save(db);
+  // Close/lock the day (locks all order edits via ffIsFinal) \u2014 only when saving today.
+  try{if(date===todayISO())localStorage.setItem("me_em_so_final_v1",todayISO());}catch(_e){}
+  // Push everything to the sheet: the day's store data + the EOD record itself.
+  try{if(window.__sync&&window.__sync.pushTxnNow)window.__sync.pushTxnNow();}catch(_e){}
+  try{if(window.__sync&&window.__sync.push)window.__sync.push("EOD",[{Id:(r.code||"")+"_"+date,Date:ddmmyy(date),EmpCode:r.code||"",EmpName:name,EodJson:JSON.stringify(r),Ts:r.eodTime}],"Id");}catch(_e){}
+  toast("\ud83c\udf19 EOD saved \u2014 din CLOSE \u2713");
   document.getElementById("eod-out").innerHTML=eodMsgHtml(r);
   renderEodDaySummary();
+  // Reveal + jump to the share block (image / WhatsApp / mail).
+  var share=document.getElementById("eod_ds_share");if(share){share.style.display="";if(share.scrollIntoView)share.scrollIntoView({behavior:"smooth",block:"center"});}
 }
 function eodMsgHtml(r){return msgActions(buildEodMsg(r),"EOD report ready \u2014 send to your group");}
 function buildEodMsg(r){
@@ -4574,17 +4593,27 @@ function renderFfCurrent(){
   var box=document.getElementById("ff_current");if(!box)return;
   if(ffIsFinal()){box.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">\u2705 <b>Day finalized</b> \u2014 sab orders lock. Naye din fresh start.</div></div>';return;}
   var l=soLoad();var tot=l.reduce(function(a,r){return a+(r.totNsv||0);},0);
-  box.innerHTML='<div class="card" style="border-left:4px solid #C8A24B"><div class="note" style="margin:0">\ud83d\udccd Orders <b>Field tab</b> me punch + review + 2 photos hote hain. Yahaan aaj ke saare visits ka <b>tracking</b>, status & <b>Close Day</b> hai.'+(l.length?(' \u2014 abhi tak <b>'+l.length+'</b> visits \u00b7 NSV \u20b9'+tot.toFixed(4)+' L'):'')+'</div></div>';
+  var canPosm=!!window._lastPosmVisit;
+  var h='<div class="card" style="border-left:4px solid #C8A24B"><div class="note" style="margin:0">\ud83d\udccd Order <b>Field tab</b> me punch hota hai. Yahaan aaj ke order <b>modify</b> (units/value/status/cancel), <b>Save</b> aur <b>POSM</b> par jao.'+(l.length?(' \u2014 abhi tak <b>'+l.length+'</b> visits \u00b7 NSV \u20b9'+tot.toFixed(4)+' L'):'')+'</div>';
+  h+='<div class="row2" style="margin-top:10px"><button class="btn btn-ghost" onclick="ffSaveLocal()">\ud83d\udcbe Save</button><button class="btn btn-navy" onclick="ffProceedToPosm()"'+(canPosm?'':' disabled')+'>Proceed to POSM \u2192</button></div>';
+  if(!canPosm)h+='<div class="hint" style="margin-top:6px">Pehle Field tab me is store ka order save karo \u2014 phir POSM khulega.</div>';
+  h+='</div>';
+  box.innerHTML=h;
 }
+// SEC tab: explicit local save (orders already persist to localStorage on every edit;
+// this confirms + refreshes the list). No sheet push here \u2014 sync fires at store-complete.
+function ffSaveLocal(){try{soSave(soLoad());}catch(e){}try{renderFfList();}catch(e){}toast("\ud83d\udcbe Order saved locally");}
+// SEC tab \u2192 POSM for the store just punched in Field.
+function ffProceedToPosm(){if(!window._lastPosmVisit){toast("Pehle Field me order save karo");return;}posmStartFromVisit();}
 function osMode(mode,el){
   var seg=document.getElementById("os_mode_seg");if(seg)seg.querySelectorAll(".seg-btn").forEach(function(b){b.classList.remove("on");});if(el)el.classList.add("on");
   var rb=document.getElementById("os_review_box");if(rb)rb.style.display="none";
   var pw=document.getElementById("os_punch_wrap"),nw=document.getElementById("os_noorder_wrap");
   if(pw)pw.style.display=(mode==="order")?"":"none";
   if(nw)nw.style.display=(mode==="order")?"none":"";
-  var mb=document.getElementById("os_main_btn");if(mb){mb.style.display="";mb.innerHTML=(mode==="order")?"\u27a1\ufe0f Review + Photos \u2192":"\u27a1\ufe0f No Order \u2014 Review + Photos \u2192";}
+  var mb=document.getElementById("os_main_btn");if(mb){mb.style.display="";mb.innerHTML=(mode==="order")?"\u27a1\ufe0f Review Order \u2192":"\u27a1\ufe0f No Order \u2014 Review \u2192";}
 }
-(function(){var mb=document.getElementById("os_main_btn");if(mb)mb.innerHTML="\u27a1\ufe0f Review + Photos \u2192";})();
+(function(){var mb=document.getElementById("os_main_btn");if(mb)mb.innerHTML="\u27a1\ufe0f Review Order \u2192";})();
 /* ===== end review+photos in Field ===== */
 
 
@@ -5190,13 +5219,10 @@ function renderFieldReview(){
   }else{
     h+='<div class="note" style="margin:0"><b>No Order</b> \u2014 Reason: '+escapeHtml(pend.reason||"")+'<br>Remarks: '+escapeHtml(pend.remarks||"")+'</div>';
   }
-  var bypass=fullAccess();
-  h+='<div style="margin-top:12px;font-weight:700;font-size:12.5px">\ud83d\udcf8 2 Live Photos '+(bypass?'<span class="hint" style="color:#b4432f">(test: optional)</span>':'(zaroori)')+'</div>';
-  h+='<div class="row2" style="margin-top:6px">'+ffPhotoSlot("Store / Shop Board","store")+ffPhotoSlot("Display","display")+'</div>';
   if(pend.mode==="order"){
-    h+='<div style="margin-top:12px"><button class="btn btn-navy" onclick="ffSubmit()">\u2705 Submit &amp; Next Store</button></div></div>';
+    h+='<div style="margin-top:12px"><button class="btn btn-navy" onclick="ffSubmit()">\ud83d\udcbe Save &amp; Go to SEC Order \u2192</button><div class="hint" style="text-align:center;margin-top:6px">Order saved locally \u2014 modify it in the SEC Order tab, then continue to POSM.</div></div></div>';
   }else{
-    h+='<div class="row2" style="margin-top:12px"><button class="btn btn-ghost" onclick="osGoPunch()">\u2190 Edit</button><button class="btn btn-navy" onclick="ffSubmit()">\u2705 Submit &amp; Next</button></div></div>';
+    h+='<div class="row2" style="margin-top:12px"><button class="btn btn-ghost" onclick="osGoPunch()">\u2190 Edit</button><button class="btn btn-navy" onclick="ffSubmit()">\ud83d\udcbe Save &amp; Go to POSM \u2192</button></div></div>';
   }
   rb.innerHTML=h;
 }
@@ -6049,25 +6075,28 @@ function saSave(){
   var savedName=rec.storeName||"Store";
   poStore=null;saGateAnswer=null;saState={photos:{display:"",store:""}};
   var sf=document.getElementById("sa_form");if(sf)sf.style.display="none";
-  renderPoContext();toast("✅ "+savedName+" Store Audit saved");renderSaList();
-  var eb=document.querySelector('.nav button[data-v="eod"]');if(eb)go("eod",eb);else{var fb=document.querySelector('.nav button[data-v="field"]');go("field",fb);}
+  renderPoContext();toast("💾 "+savedName+" Store Audit saved");renderSaList();
+  posmShowActionBar();
 }
 function saNoSave(){
   if(!poStore){toast("Select a store first");return;}
   var emp=elv("po_emp");if(!emp){toast("Select an employee");return;}
   if(!saState.photos.inside||!saState.photos.outside){toast("Capture Inside & Outside photo");return;}
+  var reason=(elv("sa_no_reason")||"").trim();
+  if(!reason){toast("Reason zaroori hai — POSM kyun nahi laga");return;}
   var date=elv("po_date")||todayISO();var s=poStore;
   var rec={id:"SA_"+Date.now(),code:empCodeOf(emp)||"",emp:emp,date:date,posmStatus:"Not Installed",storeType:s.storeType||"",clientId:s.clientId||"",companyCode:s.companyCode||s.code||"",storeName:s.storeName||s.name||"",city:s.city||"",state:s.state||"",dbCode:s.dbCode||"",dbName:s.dbName||"",
     element:"",posmType:"",location:"",brand:"",assetType:"",period:"",dominance:"",condition:"",visibility:"",action:"",
     photoEvidence:"No",installedBy:"",verifiedBy:"",verifyDate:"",nextReview:"",
     insidePhoto:saState.photos.inside,outsidePhoto:saState.photos.outside,
-    remarks:"POSM not installed at store — Inside & Outside photos captured.",ts:nowTime()};
+    remarks:reason,ts:nowTime()};
   var l=saLoad();l.push(rec);saSaveAll(l);
   var savedName=rec.storeName||"Store";
   poStore=null;saGateAnswer=null;saState={photos:{inside:"",outside:""}};
-  var snf=document.getElementById("sa_no_form");if(snf)snf.style.display="none";
-  renderPoContext();toast("✅ "+savedName+" saved (POSM Not Installed)");renderSaList();
-  var eb=document.querySelector('.nav button[data-v="eod"]');if(eb)go("eod",eb);else{var fb=document.querySelector('.nav button[data-v="field"]');go("field",fb);}
+  var snf=document.getElementById("sa_no_form");if(snf){snf.style.display="none";}
+  var rr=document.getElementById("sa_no_reason");if(rr)rr.value="";
+  renderPoContext();toast("💾 "+savedName+" saved (POSM Not Installed)");renderSaList();
+  posmShowActionBar();
 }
 function saToday(){var emp=elv("po_emp"),date=elv("po_date");return saLoad().filter(function(r){return (!date||r.date===date)&&(!emp||r.emp===emp);});}
 function renderSaList(){
@@ -6135,8 +6164,8 @@ function reqSave(){
   var savedName=rec.storeName||"Store";
   poStore=null;reqGateAnswer=null;reqState={photos:{a:"",b:""}};
   var rf=document.getElementById("req_form");if(rf)rf.style.display="none";
-  renderReqContext();toast("✅ "+savedName+" Requirement saved");renderReqList();
-  var eb=document.querySelector('.nav button[data-v="eod"]');if(eb)go("eod",eb);else{var fb=document.querySelector('.nav button[data-v="field"]');go("field",fb);}
+  renderReqContext();toast("💾 "+savedName+" Requirement saved");renderReqList();
+  posmShowActionBar();
 }
 function reqToday(){var emp=elv("po_emp"),date=elv("po_date");return reqLoad().filter(function(r){return (!date||r.date===date)&&(!emp||r.emp===emp);});}
 function renderReqList(){
@@ -6163,6 +6192,7 @@ function posmMasterEmail(){var txt=posmMasterSummaryText();var subject=encodeURI
 
 function posmStartFromVisit(){
   var vis=window._lastPosmVisit;if(!vis){toast("No recent visit");return;}
+  posmHideActionBar();
   var btn=document.querySelector('.nav button[data-v="posm"]');go("posm",btn);
   var ab=document.querySelector('#po_subnav .seg-btn[data-s="audit"]');poSubTab("audit",ab);
   setv("po_emp",vis.emp||"");setv("po_date",vis.date||todayISO());
@@ -6175,6 +6205,12 @@ function posmStartFromVisit(){
   renderPoContext();renderSaList();renderReqContext();renderReqList();
 }
 function posmSkipVisit(){var out=document.getElementById("os_out");if(out)out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">👍 Select the next store to continue.</div></div>';}
+function posmShowActionBar(){var b=document.getElementById("posm_action_bar");if(b){b.style.display="";if(b.scrollIntoView)b.scrollIntoView({behavior:"smooth",block:"center"});}}
+function posmHideActionBar(){var b=document.getElementById("posm_action_bar");if(b)b.style.display="none";}
+// One complete store cycle done → push that store's data to the sheet (queued if offline).
+function posmSyncStoreDone(){try{if(window.__sync&&window.__sync.pushTxnNow){window.__sync.pushTxnNow();}else if(window.__syncPhotosNow){window.__syncPhotosNow();}}catch(e){}}
+function posmNextStore(){posmHideActionBar();posmSyncStoreDone();window._lastPosmVisit=null;var fb=document.querySelector('.nav button[data-v="field"]');go("field",fb);toast("➡️ Agla store select karo");}
+function posmProceedEod(){posmHideActionBar();posmSyncStoreDone();window._lastPosmVisit=null;var eb=document.querySelector('.nav button[data-v="eod"]');if(eb)go("eod",eb);}
 
 
 /* ---- DISPATCH: Company -> Distributor/Sub/Super ---- */
@@ -6262,10 +6298,6 @@ function ffSubmit(){
   if(ffIsFinal()){toast("Day finalized — locked");return;}
   var pend=_ffPending;if(!pend){toast("No pending order");return;}
   var isCancel=(pend.status==="Cancel Order");
-  if(!isCancel&&!fullAccess()){
-    if(!(pend.photos&&pend.photos.store)){toast("📸 Take a live photo of the store/board");return;}
-    if(!(pend.photos&&pend.photos.display)){toast("📸 Take a live photo of the display");return;}
-  }
   var lines=[],totUnits=0,totNsv=0;
   if(pend.mode==="order"){lines=pend.lines.map(function(o){var val=(o.value!=null&&o.value!=="")?num(o.value):num(o.units)*num(o.mrp);var nsv=val*0.6/100000;totUnits+=num(o.units);totNsv+=nsv;return {code:o.code,name:o.name,brand:o.brand,targetBrand:o.targetBrand,category:o.category,subCategory:o.subCategory,mrp:o.mrp,uom:o.uom,units:num(o.units),value:val,nsvLakh:+nsv.toFixed(4)};});}
   var s=pend.store||{};
@@ -6280,13 +6312,17 @@ function ffSubmit(){
   osShowPunchForm();
   window._lastPosmVisit={emp:rec.emp,date:rec.date,store:{storeName:rec.storeName,storeType:rec.storeType,city:rec.city,state:rec.state,companyCode:rec.companyCode,clientId:rec.clientId,dbCode:rec.dbCode,dbName:rec.dbName}};
   var out=document.getElementById("os_out");
-  if(out){
-    if(isCancel){out.innerHTML='<div class="card" style="border-left:4px solid #b4432f"><div class="note" style="margin:0">🚫 <b>'+escapeHtml(savedName)+'</b> — order cancelled (reason saved). Punch a new order or select the next store. <span class="hint">(Tracking in SEC Order tab)</span></div></div>';}
-    else{out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">✅ <b>'+escapeHtml(savedName)+'</b> visit saved. <span class="hint">Opening POSM audit for this store…</span></div></div>';posmStartFromVisit();}
-  }
-  toast((isCancel?"🚫 ":"✅ ")+savedName+(isCancel?" cancelled":" saved"));
+  toast((isCancel?"🚫 ":"💾 ")+savedName+(isCancel?" cancelled" :" saved"));
   try{renderFfList();}catch(e){}
-  if(out&&out.scrollIntoView)out.scrollIntoView({behavior:"smooth",block:"center"});
+  // Routing: an actual order → SEC Order tab (modify there, then Proceed to POSM).
+  // No-order / cancel → straight to POSM for this store.
+  if(pend.mode==="order"&&!isCancel){
+    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">💾 <b>'+escapeHtml(savedName)+'</b> order saved. <span class="hint">Opening SEC Order tab — modify if needed, then Proceed to POSM.</span></div></div>';
+    var fb=document.querySelector('.nav button[data-v="fulfil"]');go("fulfil",fb);
+  }else{
+    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">💾 <b>'+escapeHtml(savedName)+'</b> saved. <span class="hint">Opening POSM for this store…</span></div></div>';
+    posmStartFromVisit();
+  }
 }
 /* ================= end POSM module ================= */
 
@@ -8329,15 +8365,9 @@ var TA_REOPEN_KEY="me_em_tada_reopen";
 var TA_HOD_APPROVED_KEY="me_em_tada_hod_approved";
 
 function tadaCheckDeadline(){
-  // Returns {allowed:bool, reason:string, deadlineDate:string}
-  var now=new Date();var day=now.getDate();
-  var reopen=false;try{reopen=localStorage.getItem(TA_REOPEN_KEY)==="1";}catch(e){}
-  var role=(typeof getRole==="function")?getRole():"admin";
-  // Admin/HOD can always submit
-  if(role==="admin")return {allowed:true,reason:"Admin/HOD — no deadline",deadlineDate:""};
-  if(day<=TA_DEADLINE_DAY)return {allowed:true,reason:"Within deadline (day "+day+" ≤ "+TA_DEADLINE_DAY+")",deadlineDate:""};
-  if(reopen)return {allowed:true,reason:"HOD ne reopen kiya — late submission enabled",deadlineDate:""};
-  return {allowed:false,reason:"Deadline passed (day "+day+" > "+TA_DEADLINE_DAY+"). HOD approval par hi reopen hoga.",deadlineDate:TA_DEADLINE_DAY+"th of month"};
+  // TA/DA can be filled ANYTIME — whole month, no deadline, no restrictions.
+  // (Employees fill after their day/month ends; nothing gates submission.)
+  return {allowed:true,reason:"No deadline — fill anytime",deadlineDate:""};
 }
 
 function tadaUpdateDeadlineBanner(){
@@ -8400,6 +8430,7 @@ function tadaSaveClaim(status){
   var b=tadaCalc();
   var claim={id:"TA_"+Date.now()+"_"+Math.random().toString(36).substr(2,5),emp:empLabel,empCode:empCode,empName:empName,empHq:empHq,designation:b.desig,date:date,type:elv("tada_type")||"Local",fromCity:elv("tada_from")||"",toCity:elv("tada_to")||"",mode:elv("tada_mode")||"Own2W",km:parseFloat(elv("tada_km"))||0,fare:parseFloat(elv("tada_fare"))||0,board:parseFloat(elv("tada_board"))||0,lodge:parseFloat(elv("tada_lodge"))||0,conv:parseFloat(elv("tada_conv"))||0,remarks:elv("tada_remarks")||"",breakdown:b,total:b.total,deduction:0,netAmount:b.total,hodRemarks:"",status:status||"Draft",ts:new Date().toISOString(),approvedBy:"",approvedAt:"",paidAt:""};
   var arr=taLoad();arr.push(claim);taSave(arr);
+  try{if(window.__sync&&window.__sync.push)window.__sync.push("TaDa",[{Id:claim.id,Date:ddmmyy(date),EmpCode:empCode,EmpName:empName,ClaimJson:JSON.stringify(claim),Status:claim.status,Ts:claim.ts}],"Id");}catch(_e){}
   toast("Claim saved as "+claim.status+" (Total ₹"+claim.total.toFixed(0)+") ✓");
   ["tada_km","tada_fare","tada_board","tada_lodge","tada_conv","tada_remarks","tada_from","tada_to"].forEach(function(id){var e=document.getElementById(id);if(e)e.value="";});
   var out=document.getElementById("tada_calc_out");if(out)out.innerHTML="Auto-calc yaha aayega — form fill karo";
@@ -10072,6 +10103,70 @@ function tadaFillClaimDesigDropdown(){
     writeLocalMaster(m);
   }
 
+  // ─── Transactional PUSH: send this device's TODAY records to the sheet ───────
+  // Called at "store complete" (POSM → Next Store / Proceed to EOD). Reads the REAL
+  // localStorage keys (the old per-save hooks read wrong keys → never fired) and
+  // upserts by a stable id. Dates are stored DD-MM-YYYY (pullDateToISO reverses on pull).
+  function readKey(k){try{return JSON.parse(localStorage.getItem(k)||"[]");}catch(e){return [];}}
+  function pushTxnNow(){
+    if(!isSyncEnabled()||!currentUserEmail())return Promise.resolve({ok:false});
+    var today=(typeof todayISO==="function")?todayISO():"";
+    function todayOnly(r){return !today||String(r.date||"")===today;}
+    var jobs=[];
+    var so=readKey("me_em_secorders_v1").filter(todayOnly);
+    if(so.length)jobs.push(pushRows("SecOrders",so.map(function(r){return {
+      PoNumber:r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
+      OrderSource:r.source||"Store Visit",StoreType:r.storeType,ClientId:r.clientId,
+      CompanyCode:r.companyCode,StoreName:r.storeName,City:r.city,State:r.state,
+      DbCode:r.dbCode,DbName:r.dbName,Status:r.status,CancelReason:r.cancelReason||"",
+      Remarks:r.remarks||"",TotUnits:r.totUnits||0,TotNsv:r.totNsv||0,
+      LinesJson:JSON.stringify(r.lines||[]),Ts:r.ts};}),"PoNumber"));
+    var sa=readKey("me_em_storeaudit_v1").filter(todayOnly);
+    if(sa.length)jobs.push(pushRows("POSM_Audit",sa.map(function(r){return {
+      Id:r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
+      PosmStatus:r.posmStatus||"Installed",StoreType:r.storeType,ClientId:r.clientId,
+      CompanyCode:r.companyCode,StoreName:r.storeName,City:r.city,State:r.state,
+      Element:r.element||"",PosmType:r.posmType||"",Location:r.location||"",Brand:r.brand||"",
+      AssetType:r.assetType||"",Period:r.period||"",Dominance:r.dominance||"",Condition:r.condition||"",
+      Visibility:r.visibility||"",Action:r.action||"",PhotoEvidence:r.photoEvidence||"",
+      InstalledBy:r.installedBy||"",VerifiedBy:r.verifiedBy||"",VerifyDate:fmtDDMMYYYY(r.verifyDate),
+      NextReview:fmtDDMMYYYY(r.nextReview),Remarks:r.remarks||"",Ts:r.ts};}),"Id"));
+    var rq=readKey("me_em_posmreq_v1").filter(todayOnly);
+    if(rq.length)jobs.push(pushRows("POSM_Requirement",rq.map(function(r){return {
+      Id:r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
+      StoreType:r.storeType,ClientId:r.clientId,CompanyCode:r.companyCode,
+      StoreName:r.storeName,City:r.city,State:r.state,
+      Requirement:r.requirement,Remarks:r.remarks||"",Ts:r.ts};}),"Id"));
+    var ns=readKey("me_em_newstores_v1").filter(todayOnly);
+    if(ns.length)jobs.push(pushRows("NewStores",ns.map(function(r){return {
+      StoreId:r.storeId||r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
+      DbCode:r.dbCode,DbName:r.dbName,StoreType:r.type,StoreName:r.storeName,State:r.state,
+      Town:r.town,Address:r.address,Pincode:r.pincode,Beat:r.beat,Category:r.category,
+      DaySales:r.daySales,MonthlyTurnover:r.monthlyTurnover,OwnerName:r.owner,OwnerMobile:r.ownerMob,
+      Reason:r.reason,Status:r.status||"In-Process",StatusReason:r.statusReason||"",Ts:r.ts};}),"StoreId"));
+    setTimeout(function(){try{if(window.__syncPhotosNow)window.__syncPhotosNow();}catch(e){}},600);
+    return Promise.all(jobs).then(function(){setStatus("synced","☁️ Store synced · "+timeShort());return {ok:true};}).catch(function(e){return {ok:false,error:String(e)};});
+  }
+
+  // ─── Transactional MERGE-DOWN: fold pulled rows into local (union by id) ─────
+  // Adds remote rows not already present locally (local wins → unsynced edits kept).
+  // Gives Admin/HOD cross-device visibility. Converts sheet dates back to ISO.
+  function mergeTxnFromRemote(remote){
+    function mergeKey(localKey,remoteArr,remoteIdField,localIdOf,mapFn){
+      if(!remoteArr||!remoteArr.length)return;
+      var local=readKey(localKey);
+      var seen={};local.forEach(function(r){var id=localIdOf(r);if(id!=null&&id!=="")seen[String(id)]=true;});
+      var added=0;
+      remoteArr.forEach(function(row){var id=row[remoteIdField];if(id==null||id==="")return;if(seen[String(id)])return;var rec=mapFn(row);if(!rec)return;local.push(rec);seen[String(id)]=true;added++;});
+      if(added){try{localStorage.setItem(localKey,JSON.stringify(local));}catch(e){}}
+    }
+    var byId=function(r){return r.id;};
+    mergeKey("me_em_secorders_v1",remote.SecOrders,"PoNumber",byId,function(r){return {id:r.PoNumber,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),source:r.OrderSource||"Store Visit",storeType:r.StoreType,clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,city:r.City,state:r.State,dbCode:r.DbCode,dbName:r.DbName,status:r.Status,cancelReason:r.CancelReason||"",remarks:r.Remarks||"",totUnits:+r.TotUnits||0,totNsv:+r.TotNsv||0,lines:(function(){try{return JSON.parse(r.LinesJson||"[]");}catch(e){return [];}})(),photoStore:"",photoDisplay:"",ts:r.Ts};});
+    mergeKey("me_em_storeaudit_v1",remote.POSM_Audit,"Id",byId,function(r){return {id:r.Id,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),posmStatus:r.PosmStatus||"Installed",storeType:r.StoreType,clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,city:r.City,state:r.State,element:r.Element||"",posmType:r.PosmType||"",location:r.Location||"",brand:r.Brand||"",assetType:r.AssetType||"",period:r.Period||"",dominance:r.Dominance||"",condition:r.Condition||"",visibility:r.Visibility||"",action:r.Action||"",photoEvidence:r.PhotoEvidence||"",installedBy:r.InstalledBy||"",verifiedBy:r.VerifiedBy||"",verifyDate:pullDateToISO(r.VerifyDate),nextReview:pullDateToISO(r.NextReview),remarks:r.Remarks||"",ts:r.Ts};});
+    mergeKey("me_em_posmreq_v1",remote.POSM_Requirement,"Id",byId,function(r){return {id:r.Id,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),storeType:r.StoreType,clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,city:r.City,state:r.State,requirement:r.Requirement,remarks:r.Remarks||"",photoA:"",photoB:"",ts:r.Ts};});
+    mergeKey("me_em_newstores_v1",remote.NewStores,"StoreId",function(r){return r.storeId||r.id;},function(r){return {id:r.StoreId,storeId:r.StoreId,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),dbCode:r.DbCode,dbName:r.DbName,type:r.StoreType,storeName:r.StoreName,state:r.State,town:r.Town,address:r.Address,pincode:r.Pincode,beat:r.Beat,category:r.Category,daySales:r.DaySales,monthlyTurnover:r.MonthlyTurnover,owner:r.OwnerName,ownerMob:r.OwnerMobile,reason:r.Reason,status:r.Status||"In-Process",statusReason:r.StatusReason||"",ts:r.Ts};});
+  }
+
   // ─── Core: pull ─────────────────────────────────────────────
   function pullAll(){
     var email=currentUserEmail();
@@ -10083,6 +10178,8 @@ function tadaFillClaimDesigDropdown(){
       if(res.LoginConfig)mergeLoginConfig(res.LoginConfig);
       // Apply master
       mergeMasterFromRemote(res);
+      // Apply transactional data (SecOrders / POSM / NewStores) — cross-device visibility
+      try{mergeTxnFromRemote(res);}catch(e){}
       // Store role/code for filters
       try{
         localStorage.setItem("me_em_sync_role",res.role||"Employee");
@@ -10562,6 +10659,7 @@ function tadaFillClaimDesigDropdown(){
     url:SYNC_URL,
     pullNow:pullAll,
     push:pushRows,
+    pushTxnNow:pushTxnNow,
     pushLoginUser:pushLoginUser,
     replaceSheet:replaceSheetRemote,
     drain:drainQueue,
@@ -10593,10 +10691,9 @@ function tadaFillClaimDesigDropdown(){
     setTimeout(function(){
       hookLogin();
       hookMasterUpload();
-      hookSecOrderSave();
-      hookNewStoreSave();
-      hookSaSave();
-      hookReqSave();
+      // Transactional ROW push now happens once per completed store via pushTxnNow()
+      // (POSM → Next Store / Proceed to EOD). The old per-save hooks read the wrong
+      // localStorage keys and are superseded, so they are intentionally NOT installed.
       installPhotoHooks();
     },500);
     // Persistence fns may be (re)assigned after the app finishes loading; re-install
