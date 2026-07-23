@@ -745,7 +745,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
         <input type="text" id="p_state_other" list="dl_state_other" onchange="onStateOther()" placeholder="Type or pick state…" autocomplete="off"><datalist id="dl_state_other"></datalist>
         <div class="row2" style="margin-top:6px">
           <div><label class="hint" style="margin-top:0">Town/City Name</label><input type="text" id="p_town_other_sel" list="dl_town_other" onchange="onTownOther()" placeholder="Type or pick city…" autocomplete="off"><datalist id="dl_town_other"></datalist></div>
-          <div><label class="hint" style="margin-top:0">Beat/Market Name</label><input type="text" id="p_beat_other" list="dl_beat_other" placeholder="Type or pick beat / market" autocomplete="off"><datalist id="dl_beat_other"></datalist></div>
+          <div><label class="hint" style="margin-top:0">Beat/Market Name</label><input type="text" id="p_beat_other" placeholder="Type beat / market name" autocomplete="off"></div>
         </div>
         <div id="p_addcity_wrap" style="display:none;margin-top:6px">
           <label class="hint" style="margin-top:0">New City Name <span class="hint">(added to master after admin approval)</span></label>
@@ -2368,10 +2368,17 @@ function planSubmitDeviation(){
   var now=Date.now();
   var rec=ex||{id:id,code:code,date:date};
   rec.emp=elv("p_emp_name")||"";rec.plannedWw=planned;rec.actualWw=actual;
+  // Structured change fields → drive the Master_PJP tracking columns.
+  rec.changedWw=ww;
+  rec.changedState=isFieldWork(ww)?elv("p_state_other").trim():"";
+  rec.changedCity=isFieldWork(ww)?(elv("p_town_other_sel").trim()==="__add__"?"":elv("p_town_other_sel").trim()):"";
+  rec.changedBeat=isFieldWork(ww)?elv("p_beat_other").trim():"";
+  if(typeof rec.rejectCount!=="number")rec.rejectCount=0;
   rec.reason=(d.summary||"Plan changed");rec.status="Pending";rec.hodRemarks="";rec.ts=(typeof nowTime==="function")?nowTime():"";rec.updatedAt=now;
   if(!ex)arr.push(rec);
   if(typeof devSaveAll==="function")devSaveAll(arr);
   try{if(window.__sync&&window.__sync.pushDeviation)window.__sync.pushDeviation(rec);}catch(e){}
+  try{if(window.__sync&&window.__sync.pushMasterPjp)window.__sync.pushMasterPjp();}catch(e){}
   try{if(typeof updateApprBadge==="function")updateApprBadge();}catch(e){}
   return true;
 }
@@ -7884,8 +7891,8 @@ function apprSubmitDayReject(key){
   var a=pjpLoad();if(a[key]){a[key].status="Rejected";a[key].rejectedDays=days;a[key].rejectReason="HOD: "+(why||"in dino ko change karo");a[key].updatedAt=Date.now();pjpSaveAll(a);}
   apprPushDraft(key);_apprRejKey=null;toast("✖ Selected days rejected — rep ko notify");renderApprovals();
 }
-function apprApproveDev(id){var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Approved";a[i].hodRemarks="HOD approved";a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);toast("✅ Deviation approved");renderApprovals();}
-function apprRejectDev(id){var why=prompt("Reject reason:");if(why==null)return;var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Rejected";a[i].hodRemarks="HOD: "+why;a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);toast("✖ Deviation rejected");renderApprovals();}
+function apprApproveDev(id){var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Approved";a[i].hodRemarks="HOD approved";a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);try{if(window.__sync&&window.__sync.pushMasterPjp)window.__sync.pushMasterPjp();}catch(e){}toast("✅ Deviation approved");renderApprovals();}
+function apprRejectDev(id){var why=prompt("Reject reason:");if(why==null)return;var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Rejected";a[i].hodRemarks="HOD: "+why;a[i].rejectCount=(a[i].rejectCount||0)+1;a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);try{if(window.__sync&&window.__sync.pushMasterPjp)window.__sync.pushMasterPjp();}catch(e){}toast("✖ Deviation rejected");renderApprovals();}
 /* ═══════════════ end HOD APPROVALS MODULE ═══════════════ */
 
 /* ═══════════════ PENDING ORDERS MODULE ═══════════════ */
@@ -10713,7 +10720,7 @@ function tadaFillClaimDesigDropdown(){
     }
     // PJP (daily beat plan) — CRITICAL: without this, employees see blank PJP tab
     if(remote.Master_PJP&&remote.Master_PJP.length){
-      m.pjp=remote.Master_PJP.map(function(r){return {code:r.Code,zone:r.Zone,date:pullDateToISO(r.Date),week:r.Week,town:r.Town,beat:r.Beat,focus:r.Focus};});
+      m.pjp=remote.Master_PJP.map(function(r){return {code:r.Code,zone:r.Zone,date:pullDateToISO(r.Date),week:r.Week,town:r.Town,beat:r.Beat,focus:r.Focus,ww:r.Ww||"",status:r.Status||""};});
     }
     // Phasing targets
     if(remote.Master_Phasing&&remote.Master_Phasing.length){
@@ -10810,7 +10817,7 @@ function tadaFillClaimDesigDropdown(){
   }
   function pushDeviationRow(d){
     if(!d||!d.id)return Promise.resolve({ok:false});
-    return pushRows("Deviations",[{Id:d.id,EmpCode:d.code,EmpName:d.emp||"",Date:fmtDDMMYYYY(d.date),PlannedWw:d.plannedWw||"",ActualWw:d.actualWw||"",Reason:d.reason||"",Status:d.status||"",HodRemarks:d.hodRemarks||"",UpdatedAt:d.updatedAt||Date.now()}],"Id");
+    return pushRows("Deviations",[{Id:d.id,EmpCode:d.code,EmpName:d.emp||"",Date:fmtDDMMYYYY(d.date),PlannedWw:d.plannedWw||"",ActualWw:d.actualWw||"",Reason:d.reason||"",Status:d.status||"",HodRemarks:d.hodRemarks||"",RejectCount:d.rejectCount||0,ChangedWw:d.changedWw||"",ChangedState:d.changedState||"",ChangedCity:d.changedCity||"",ChangedBeat:d.changedBeat||"",UpdatedAt:d.updatedAt||Date.now()}],"Id");
   }
   // ─── Approvals MERGE-DOWN (newest UpdatedAt wins — HOD decisions must reach the rep) ──
   function mergeApprovalsFromRemote(remote){
@@ -10830,7 +10837,7 @@ function tadaFillClaimDesigDropdown(){
       var arr=devLoad();var byId={};arr.forEach(function(d){byId[d.id]=d;});var ch=false;
       remote.Deviations.forEach(function(r){
         var rUpd=+r.UpdatedAt||0;var loc=byId[r.Id];var lUpd=(loc&&+loc.updatedAt)||0;if(loc&&lUpd>=rUpd)return;
-        var rec={id:r.Id,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),plannedWw:r.PlannedWw,actualWw:r.ActualWw,reason:r.Reason,status:r.Status,hodRemarks:r.HodRemarks||"",updatedAt:rUpd};
+        var rec={id:r.Id,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),plannedWw:r.PlannedWw,actualWw:r.ActualWw,reason:r.Reason,status:r.Status,hodRemarks:r.HodRemarks||"",rejectCount:+r.RejectCount||0,changedWw:r.ChangedWw||"",changedState:r.ChangedState||"",changedCity:r.ChangedCity||"",changedBeat:r.ChangedBeat||"",updatedAt:rUpd};
         if(loc){Object.keys(rec).forEach(function(k){loc[k]=rec[k];});}else{arr.push(rec);byId[r.Id]=rec;}ch=true;
       });
       if(ch)try{devSaveAll(arr);}catch(e){}
@@ -11099,10 +11106,9 @@ function tadaFillClaimDesigDropdown(){
           var dRows=m.distributors.map(function(d){return {Code:d.code,Name:d.name};});
           jobs.push(replaceSheetRemote("Master_Distributors",dRows));
         }
-        // PJP (daily beat plan)
+        // PJP (daily beat plan) — enriched with plan-change / approval tracking columns
         if(m.pjp&&m.pjp.length){
-          var pjpRows=m.pjp.map(function(p){return {Code:p.code,Zone:p.zone,Date:fmtDDMMYYYY(p.date),Week:p.week,Town:p.town,Beat:p.beat,Focus:p.focus};});
-          jobs.push(replaceSheetRemote("Master_PJP",pjpRows));
+          jobs.push(replaceSheetRemote("Master_PJP",buildMasterPjpRows(m)));
         }
         // Phasing targets
         if(m.phasing&&m.phasing.length){
@@ -11118,6 +11124,43 @@ function tadaFillClaimDesigDropdown(){
       },200);
       return res;
     };
+  }
+
+  // ─── Master_PJP rows enriched with plan-change / approval tracking ──────────
+  // Each daily plan row also carries: the working-with (Ww), plan status, and — if the
+  // rep deviated from the original PJP that day — HodApproved, RejectedCount, ChangedPlan,
+  // ChangedState/City/Beat, Approvals (from the Deviations store, keyed code__date).
+  function buildMasterPjpRows(m){
+    var devIdx={};
+    try{if(typeof devLoad==="function"){(devLoad()||[]).forEach(function(d){if(d&&d.code&&d.date)devIdx[String(d.code)+"__"+String(d.date)]=d;});}}catch(e){}
+    return (m.pjp||[]).map(function(p){
+      var dv=devIdx[String(p.code)+"__"+String(p.date)]||null;
+      var approved=dv?/approved/i.test(String(dv.status||"")):false;
+      return {
+        Code:p.code,Zone:p.zone,Date:fmtDDMMYYYY(p.date),Week:p.week,Town:p.town,Beat:p.beat,Focus:p.focus,
+        Ww:p.ww||"",Status:p.status||"",
+        HodApproved:dv?(approved?"Yes":"No"):"",
+        RejectedCount:dv?(dv.rejectCount||0):"",
+        ChangedPlan:dv?"Yes":"",
+        ChangedState:dv?(dv.changedState||""):"",
+        ChangedCity:dv?(dv.changedCity||""):"",
+        ChangedBeat:dv?(dv.changedBeat||""):"",
+        Approvals:dv?(dv.status||""):""
+      };
+    });
+  }
+  // Re-push ONLY Master_PJP (used after a plan deviation is created/approved/rejected so
+  // the sheet's tracking columns stay current without re-pushing every master sheet).
+  function pushMasterPjpNow(){
+    try{
+      // Backend replaceSheet is Admin/HOD-only — don't let a rep queue a failing job.
+      // The rep's changed fields still reach the sheet via the Deviations push; the HOD's
+      // approve/reject (from a privileged device) writes the enriched Master_PJP.
+      if(typeof sessionIsAdminHod==="function"&&!sessionIsAdminHod())return Promise.resolve({ok:false,skipped:true});
+      var m=(typeof readLocalMaster==="function")?readLocalMaster():null;
+      if(!m||!m.pjp||!m.pjp.length)return Promise.resolve({ok:false});
+      return replaceSheetRemote("Master_PJP",buildMasterPjpRows(m));
+    }catch(e){return Promise.resolve({ok:false,error:String(e)});}
   }
 
   // ─── Hook: Sec Order push on save ───────────────────────
@@ -11340,6 +11383,7 @@ function tadaFillClaimDesigDropdown(){
     pushTxnNow:pushTxnNow,
     pushPjpDraft:pushPjpDraftRow,
     pushDeviation:pushDeviationRow,
+    pushMasterPjp:pushMasterPjpNow,
     pushLoginUser:pushLoginUser,
     replaceSheet:replaceSheetRemote,
     drain:drainQueue,
