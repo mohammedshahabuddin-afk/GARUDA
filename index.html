@@ -1324,15 +1324,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <h2><span class="dot"></span>🌙 Day Summary <span id="eod_ds_date" class="hint" style="font-weight:400"></span></h2>
       <div class="note" style="margin:0 0 8px">Poore din ka kaam ka summary — Order vs Deliver, brand-wise, MSL vs Non-MSL. HOD/ZM/RSM/ASM ko WhatsApp/Email/Image bhej sakte hain (Plan ki tarah).</div>
       <div id="eod_ds_out"></div>
-      <div id="eod_ds_share" style="display:none;margin-top:12px">
-        <button class="btn btn-navy" onclick="eodShareImage()">🖼️ Send as Image (WhatsApp)</button>
-        <div class="row2" style="margin-top:8px">
-          <button class="btn btn-ghost" onclick="eodShareWA()">🟢 WhatsApp text</button>
-          <button class="btn btn-ghost" onclick="eodShareEmail()">📧 Email HOD/ZM/RSM/ASM</button>
-        </div>
-        <div class="hint" style="margin:8px 0 4px">Send to:</div>
-        <div id="eod_ds_recips"></div>
-      </div>
+      <div class="hint" style="margin-top:8px">📤 Save EOD karo — neeche <b>WhatsApp</b> / <b>Gmail</b> par bhejne ka option milega (poora din ka summary + naye outlet / sec order ki Excel).</div>
     </div>
     <div class="card">
       <h2><span class="dot"></span>Calls — Plan vs Achieved</h2>
@@ -1366,7 +1358,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <label>Remarks <span class="hint">(optional)</span></label>
       <textarea id="e_remarks" rows="2" placeholder="Any note / issue…"></textarea>
     </div>
-    <button class="btn btn-navy" onclick="saveEod()">💾 Save EOD &amp; Send on WhatsApp</button>
+    <button class="btn btn-navy" onclick="saveEod()">💾 Save EOD (Close Day)</button>
     </div>
     <div id="eod-out"></div>
   </section>
@@ -2643,10 +2635,9 @@ function saveEod(){
   try{if(window.__sync&&window.__sync.pushTxnNow)window.__sync.pushTxnNow();}catch(_e){}
   try{if(window.__sync&&window.__sync.push)window.__sync.push("EOD",[{Id:(r.code||"")+"_"+date,Date:ddmmyy(date),EmpCode:r.code||"",EmpName:name,EodJson:JSON.stringify(r),Ts:r.eodTime}],"Id");}catch(_e){}
   toast("\ud83c\udf19 EOD saved \u2014 din CLOSE \u2713");
-  document.getElementById("eod-out").innerHTML=eodMsgHtml(r);
   renderEodDaySummary();
-  // Reveal + jump to the share block (image / WhatsApp / mail).
-  var share=document.getElementById("eod_ds_share");if(share){share.style.display="";if(share.scrollIntoView)share.scrollIntoView({behavior:"smooth",block:"center"});}
+  eodRenderShareBottom();
+  var box=document.getElementById("eod-out");if(box&&box.scrollIntoView)box.scrollIntoView({behavior:"smooth",block:"center"});
 }
 function eodMsgHtml(r){return msgActions(buildEodMsg(r),"EOD report ready \u2014 send to your group");}
 function buildEodMsg(r){
@@ -2863,6 +2854,7 @@ function fStoreMode(mode,el){
   var isNew=(mode==="new");
   document.getElementById("f_new_wrap").style.display=isNew?"":"none";
   document.getElementById("f_old_wrap").style.display=isNew?"none":"";
+  if(isNew){try{fillDistDatalists();}catch(e){}}
   window._secSource=(mode==="tel")?"Telephonic Call":"Store Visit";
   var lbl=document.getElementById("os_source_lbl");if(lbl)lbl.innerHTML=(mode==="tel")?"\ud83d\udcde Telephonic Call \u2014 order phone pe liya":"\ud83c\udfea MEGA BA &amp; BA Store \u2014 store visit";
   if(!isNew){osFillStores();osFillProdFilters();osFillProdList();renderOsLines();}
@@ -2986,6 +2978,11 @@ function nsSuccessHtml(r){
 }
 function escAttr(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
 function distList(){var m=loadMaster();return (m&&m.distributors)?m.distributors:[];}
+// Distributor code↔name resolvers (fill from master so reps don't type both).
+function distName(code){var c=String(code||"").trim().toUpperCase();if(!c)return "";var d=distList().filter(function(z){return String(z.code||"").toUpperCase()===c;})[0];return d?(d.name||""):"";}
+function distCode(name){var n=String(name||"").trim().toLowerCase();if(!n)return "";var d=distList().filter(function(z){return String(z.name||"").toLowerCase()===n;})[0];return d?(d.code||""):"";}
+// Backfill a store-fill object's distributor pair when master gives us one side only.
+function resolveDbPair(F){if(F.os_d_dbcode&&!F.os_d_dbname){var nm=distName(F.os_d_dbcode);if(nm)F.os_d_dbname=nm;}else if(!F.os_d_dbcode&&F.os_d_dbname){var cd=distCode(F.os_d_dbname);if(cd)F.os_d_dbcode=cd;}return F;}
 function fillDistDatalists(){
   var dl=distList();var dc=document.getElementById("dl_ns_dbcode"),dn=document.getElementById("dl_ns_dbname");
   if(dc){dc.innerHTML="";dl.forEach(function(z){var o=document.createElement("option");o.value=(z.code||"");o.textContent=(z.name||"");dc.appendChild(o);});}
@@ -4455,16 +4452,11 @@ function renderFfList(){
     var telp=(r.source==="Telephonic Call");
     h+='<div style="border:1px solid #e3ece5;border-radius:10px;padding:9px;margin-bottom:9px">';
     h+='<div style="display:flex;justify-content:space-between;gap:6px;align-items:center"><span style="font-weight:700;font-size:12.5px">'+escapeHtml(r.storeName||"")+' <span class="hint">('+escapeHtml(r.storeType||"")+')</span></span><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;color:#fff;background:'+(telp?"#7A5AF8":"#0E4F3B")+'">'+(telp?"\ud83d\udcde Tel":"\ud83c\udfea Visit")+'</span></div>';
-    if(r.status==="No Order")h+='<div class="note" style="margin:3px 0 6px">No Order \u2014 '+escapeHtml(r.cancelReason||"")+'</div>';
-    else h+='<div class="note" style="margin:3px 0 6px">'+(r.lines?r.lines.length:0)+' SKU \u00b7 '+(r.totUnits||0)+' u \u00b7 NSV \u20b9'+(r.totNsv||0).toFixed(4)+' L</div>';
-    var ps=r.photoStore?('<img src="'+r.photoStore+'" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1px solid #dfe6e0">'):'<span class="hint">no store photo</span>';
-    var pd=r.photoDisplay?('<img src="'+r.photoDisplay+'" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1px solid #dfe6e0">'):'<span class="hint">no display photo</span>';
-    h+='<div style="display:flex;gap:6px;margin-bottom:6px">'+ps+pd+'</div>';
-    if(r.status!=="No Order"&&!fin){
-      var opts=["Order in Process","Billing Done","No Order","Cancel Order"].map(function(s){return '<option'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join("");
-      h+='<div class="row2"><div><label class="hint" style="margin-top:0">Status</label><select onchange="ffStatusChange(\''+r.id+'\',this.value)">'+opts+'</select></div><div style="display:flex;align-items:flex-end"><button class="btn btn-ghost small" onclick="ffEdit(\''+r.id+'\')">\u270f\ufe0f Edit order</button></div></div>';
-    }else if(!fin){
-      h+='<button class="btn btn-ghost small" onclick="ffEdit(\''+r.id+'\')">\u270f\ufe0f Edit</button>';
+    if(r.status==="No Order"||r.status==="Cancel Order")h+='<div class="note" style="margin:3px 0 6px">'+escapeHtml(r.status)+' \u2014 '+escapeHtml(r.cancelReason||"")+'</div>';
+    else h+='<div class="note" style="margin:3px 0 6px">'+(r.lines?r.lines.length:0)+' SKU \u00b7 '+(r.totUnits||0)+' u \u00b7 NSV \u20b9'+(r.totNsv||0).toFixed(4)+' L \u00b7 <b>'+escapeHtml(r.status||"")+'</b></div>';
+    if(!fin){
+      if(window._secEditId===r.id){h+=secEditPanel(r);}
+      else h+='<button class="btn btn-ghost small" onclick="secEditOpen(\''+r.id+'\')">\u270f\ufe0f Edit order</button>';
     }
     h+='</div>';
   });
@@ -4472,6 +4464,38 @@ function renderFfList(){
   if(!fin)h+='<button class="btn btn-navy" onclick="ffCloseDay()">\ud83c\udfc1 Close Day (Final Submit)</button>';
   box.innerHTML=h;
 }
+/* \u2500\u2500 Inline SEC order editor (edit later if a customer changes/cancels/adds) \u2500\u2500 */
+function secEditPanel(r){
+  var st=["Order in Process","Billing Done","No Order","Cancel Order"];
+  var h='<div style="border-top:1px dashed #cfe0d5;margin-top:8px;padding-top:8px">';
+  if(r.lines&&r.lines.length){
+    r.lines.forEach(function(o,i){
+      var mrp=num(o.mrp);var val=(o.value!=null&&o.value!=="")?num(o.value):num(o.units)*mrp;
+      h+='<div style="border:1px solid #e6ece9;border-radius:8px;padding:6px 8px;margin-bottom:6px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11.5px;font-weight:600;flex:1;min-width:0">'+escapeHtml(o.name||o.code||"")+'</span><button type="button" onclick="secEditRemoveLine(\''+r.id+'\','+i+')" style="border:none;background:#fdece9;color:#b4432f;border-radius:6px;padding:2px 8px;cursor:pointer">\ud83d\uddd1\ufe0f</button></div>'
+        +'<div style="display:flex;gap:8px;align-items:center;font-size:11.5px;margin-top:4px"><span>Units <input type="number" min="0" value="'+(o.units||"")+'" onchange="secEditUnits(\''+r.id+'\','+i+',this.value)" style="width:52px;text-align:center;padding:4px"></span><span>Value \u20b9<input type="number" min="0" value="'+val+'" onchange="secEditValue(\''+r.id+'\','+i+',this.value)" style="width:74px;text-align:center;padding:4px"></span></div>'
+        +'</div>';
+    });
+  }else h+='<div class="note" style="margin:0 0 6px">Koi SKU nahi (No Order / Cancel).</div>';
+  h+='<button class="btn btn-ghost small" onclick="ffEdit(\''+r.id+'\')">\u2795 Add / change products (Field)</button>';
+  h+='<label class="hint" style="margin-top:8px">Status</label><select onchange="secEditStatus(\''+r.id+'\',this.value)">'+st.map(function(s){return '<option'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join("")+'</select>';
+  h+='<label class="hint" style="margin-top:8px">Reason <span class="hint">(No Order / Cancel ke liye)</span></label><input type="text" value="'+escAttr(r.cancelReason||"")+'" onchange="secEditReason(\''+r.id+'\',this.value)" placeholder="Reason">';
+  h+='<label class="hint" style="margin-top:8px">Remarks</label><textarea rows="2" style="width:100%;box-sizing:border-box;resize:vertical" onchange="secEditRemarks(\''+r.id+'\',this.value)" placeholder="Remarks">'+escapeHtml(r.remarks||"")+'</textarea>';
+  h+='<div class="row2" style="margin-top:8px"><button class="btn btn-ghost small" onclick="secEditClose()">Close</button><button class="btn btn-navy small" onclick="secEditDone(\''+r.id+'\')">\ud83d\udcbe Save changes</button></div>';
+  h+='</div>';
+  return h;
+}
+function soRecalc(r){var tu=0,tn=0;(r.lines||[]).forEach(function(o){var val=(o.value!=null&&o.value!=="")?num(o.value):num(o.units)*num(o.mrp);o.value=val;tu+=num(o.units);tn+=val*0.6/100000;});r.totUnits=tu;r.totNsv=+tn.toFixed(4);}
+function soUpdate(id,fn){var l=soLoad();for(var i=0;i<l.length;i++){if(l[i].id===id){fn(l[i]);soRecalc(l[i]);l[i].ts=nowTime();break;}}soSave(l);}
+function secEditOpen(id){if(ffIsFinal()){toast("Day finalized \u2014 edit lock");return;}window._secEditId=id;renderFfList();}
+function secEditClose(){window._secEditId=null;renderFfList();}
+function secEditUnits(id,i,v){soUpdate(id,function(r){if(r.lines&&r.lines[i]){r.lines[i].units=num(v);r.lines[i].value=num(v)*num(r.lines[i].mrp);}});renderFfList();}
+function secEditValue(id,i,v){soUpdate(id,function(r){if(r.lines&&r.lines[i])r.lines[i].value=num(v);});renderFfList();}
+function secEditRemoveLine(id,i){soUpdate(id,function(r){if(r.lines)r.lines.splice(i,1);});renderFfList();}
+function secEditStatus(id,v){soUpdate(id,function(r){r.status=v;});renderFfList();}
+function secEditReason(id,v){soUpdate(id,function(r){r.cancelReason=v;});}
+function secEditRemarks(id,v){soUpdate(id,function(r){r.remarks=v;});}
+function secEditDone(id){window._secEditId=null;renderFfList();try{renderFfCurrent();}catch(e){}toast("\ud83d\udcbe Order update ho gaya (locally)");}
 function ffCloseDay(){
   if(!soLoad().length){toast("Koi visit nahi");return;}
   if(_ffPending){toast("Pehle current order Submit ya Field se hatao");return;}
@@ -4634,6 +4658,7 @@ function osPickStoreObj(i){
   var s=_osStoreHits[i];if(!s)return;
   osStore=s;
   var F={os_d_client:s.clientId||"",os_d_code:s.companyCode||s.code||"",os_d_name:s.storeName||s.name||"",os_d_city:s.city||"",os_d_state:s.state||"",os_d_status:s.status||"",os_d_dbcode:s.dbCode||"",os_d_dbname:s.dbName||"",os_d_type:s.storeType||s.type||""};
+  resolveDbPair(F);
   Object.keys(F).forEach(function(k){var el=document.getElementById(k);if(el)el.value=F[k];});
   setv("os_search",s.storeName||s.name||"");
   var box=document.getElementById("os_store_ac");if(box){box.style.display="none";box.innerHTML="";}
@@ -4948,6 +4973,7 @@ function osPickStore(){
   var s=src.filter(function(t){return [t.clientId,t.companyCode,t.code,t.storeName,t.name,t.city].some(function(f){return f&&String(f).toLowerCase()===vv;});})[0]||null;
   osStore=s;
   var F={os_d_client:s?(s.clientId||""):"",os_d_code:s?(s.companyCode||s.code||""):"",os_d_name:s?(s.storeName||s.name||""):"",os_d_city:s?(s.city||""):"",os_d_state:s?(s.state||""):"",os_d_status:s?(s.status||""):"",os_d_dbcode:s?(s.dbCode||""):"",os_d_dbname:s?(s.dbName||""):"",os_d_type:s?(s.storeType||s.type||""):""};
+  resolveDbPair(F);
   Object.keys(F).forEach(function(k){var el=document.getElementById(k);if(el)el.value=F[k];});
   if(s){try{osFillProdFilters();osFillProdList();}catch(e){}}
 }
@@ -5824,13 +5850,21 @@ function eodAgg(orders){
 function eodSec(title,body){return '<div style="margin-top:10px"><div style="font-weight:800;font-size:12.5px;color:#2c5f2d;border-bottom:1px solid #e3ece5;padding-bottom:3px;margin-bottom:5px">'+title+'</div>'+body+'</div>';}
 function eodKV(k,v){return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px"><span style="color:#44504a">'+k+'</span><b style="text-align:right">'+v+'</b></div>';}
 
+// SC = calls he HAS to do today (plan target); TC = total calls/visits done today;
+// PC = productive calls (visits that got an order). All derived from the day's data.
+function eodCalls(D,A){
+  var plan=D.plan||{};
+  var mconf=(loadMaster()&&loadMaster().config)?loadMaster().config:{};
+  var sc=num(plan.sc)||num(mconf.SC_Call_Target)||7;
+  var tc=(D.orders||[]).length;
+  var pc=(A&&A.placed)?A.placed.length:0;
+  return {sc:sc,tc:tc,pc:pc};
+}
 function eodSummaryInnerHtml(D,A){
   var plan=D.plan||{};
-  var scDone=elv("e_sc")||"0",tc=elv("e_tc")||"0",pc=elv("e_pc")||"0";
-  var mconf=(loadMaster()&&loadMaster().config)?loadMaster().config:{};
-  var scPlan=plan.sc||mconf.SC_Call_Target||"7";
+  var C=eodCalls(D,A);
   var s1=eodKV("Beat / Town",escapeHtml((plan.beat||"-")+" / "+(plan.town||"-")))
-    +eodKV("Calls (SC/TC/PC)",scDone+" / "+tc+" / "+pc+' <span style="color:#8a968f">(SC plan '+scPlan+')</span>')
+    +eodKV("Calls SC/TC/PC",C.sc+" / "+C.tc+" / "+C.pc+' <span style="color:#8a968f">(target / visited / with-order)</span>')
     +eodKV("Orders",A.placed.length+" placed · "+A.delivered.length+" delivered · "+A.pending.length+" pending")
     +eodKV("New Stores",D.stores.length+(plan.nsoPlan?(' <span style="color:#8a968f">(plan '+plan.nsoPlan+')</span>'):""));
   var s2=eodKV("Orders Placed",A.placed.length+" · "+A.totUnits+"u · ₹"+eodF(A.totNsv)+"L")
@@ -5852,14 +5886,14 @@ function eodSummaryInnerHtml(D,A){
 }
 
 function eodSummaryText(D,A){
-  var plan=D.plan||{};var scDone=elv("e_sc")||"0",tc=elv("e_tc")||"0",pc=elv("e_pc")||"0";
+  var plan=D.plan||{};var C=eodCalls(D,A);
   var L=[];
   L.push("*EOD Day Summary*");
   L.push((D.name||"")+" · "+ddmmyy(D.date));
   L.push("");
   L.push("*Plan vs Achievement*");
   L.push("Beat/Town: "+((plan.beat||"-")+" / "+(plan.town||"-")));
-  L.push("Calls SC/TC/PC: "+scDone+"/"+tc+"/"+pc);
+  L.push("Calls SC/TC/PC: "+C.sc+"/"+C.tc+"/"+C.pc+" (target/visited/with-order)");
   L.push("Orders: "+A.placed.length+" placed, "+A.delivered.length+" delivered, "+A.pending.length+" pending");
   L.push("New Stores: "+D.stores.length);
   L.push("");
@@ -5881,17 +5915,19 @@ function eodSummaryText(D,A){
 
 function renderEodDaySummary(){
   var out=document.getElementById("eod_ds_out");if(!out)return;
-  var share=document.getElementById("eod_ds_share");
   var dl=document.getElementById("eod_ds_date");
   var D=eodDayData();
   if(dl)dl.textContent=D.date?("· "+ddmmyy(D.date)):"";
-  if(!D.name){out.innerHTML='<div class="note" style="margin:0">Employee &amp; date select karein.</div>';if(share)share.style.display="none";return;}
+  if(!D.name){out.innerHTML='<div class="note" style="margin:0">Employee &amp; date select karein.</div>';return;}
   var A=eodAgg(D.orders);
+  // Auto-fill SC/TC/PC from the day's data (read-only — always accurate).
+  var C=eodCalls(D,A);
+  setv("e_sc",C.sc);setv("e_tc",C.tc);setv("e_pc",C.pc);
+  ["e_sc","e_tc","e_pc"].forEach(function(id){var el=document.getElementById(id);if(el)el.readOnly=true;});
+  try{updateCallPct();}catch(e){}
   out.innerHTML=eodSummaryInnerHtml(D,A);
   window._lastEodMsg=eodSummaryText(D,A);
   window._lastEodDate=D.date;
-  if(share)share.style.display="";
-  eodRenderRecips();
 }
 
 function eodRecips(){
@@ -5901,7 +5937,7 @@ function eodRecips(){
   return out;
 }
 function eodWA(mob){var n=String(mob||"").replace(/\D/g,"");if(n.length===10)n="91"+n;window.open("https://wa.me/"+n+"?text="+encodeURIComponent(window._lastEodMsg||""),"_blank");}
-function eodEmail(to){var sub=encodeURIComponent("EOD Day Summary — "+(elv("e_emp")||"")+" — "+ddmmyy(elv("e_date")||todayISO()));window.open("mailto:"+to+"?subject="+sub+"&body="+encodeURIComponent(window._lastEodMsg||""),"_blank");}
+function eodEmail(to){var sub=encodeURIComponent("EOD Day Summary — "+(elv("e_emp")||"")+" — "+ddmmyy(elv("e_date")||todayISO()));var body=encodeURIComponent(window._lastEodMsg||"");window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(to)+"&su="+sub+"&body="+body,"_blank");}
 function eodShareWA(){var rs=eodRecips();eodWA(rs.length&&rs[0].mob?rs[0].mob:"");}
 function eodShareEmail(){var rs=eodRecips();var to=rs.filter(function(r){return r.email;}).map(function(r){return r.email;}).join(",");if(!to){toast("Koi email master me nahi");return;}eodEmail(to);}
 function eodRenderRecips(){
@@ -5914,6 +5950,71 @@ function eodRenderRecips(){
     if(r.email)b+='<button class="btn btn-ghost small" style="width:auto;flex:none;padding:4px 9px;font-size:12px" onclick="eodEmail(\''+r.email+'\')">✉️</button>';
     return b+'</div>';
   }).join("");
+}
+
+/* ─── EOD share (bottom): full day summary + New-Outlet/Sec-Order Excel ─── */
+function eodExcelFilename(){return "EOD_"+String(elv("e_emp")||"Emp").replace(/[^\w]+/g,"_")+"_"+ddmmyy(elv("e_date")||todayISO())+".xlsx";}
+function eodBuildDayWorkbook(){
+  if(typeof XLSX==="undefined")return null;
+  var D=eodDayData();var wb=XLSX.utils.book_new();
+  var soHead=["Date","Emp Code","Employee","Store","Store Type","City","Company Code","Distributor Code","Distributor Name","Status","SKU Code","SKU Name","Brand","Category","MRP","Units","Value(Rs)"];
+  var soRows=[soHead];
+  (D.orders||[]).forEach(function(o){
+    if(o.lines&&o.lines.length){o.lines.forEach(function(l){soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status,l.code,l.name,l.brand,l.category,num(l.mrp),num(l.units),num(l.value)]);});}
+    else{soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status||"No Order","","","","","","",""]);}
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(soRows),"Sec Orders");
+  if((D.stores||[]).length){
+    var nsHead=["Date","Emp Code","Employee","Store Name","Type","Distributor Code","Distributor Name","State","Town","Address","Pincode","Beat","Category","Owner","Owner Mobile","Reason","Status"];
+    var nsRows=[nsHead];
+    D.stores.forEach(function(s){nsRows.push([ddmmyy(s.date),s.code,s.emp,s.storeName,s.type,s.dbCode,s.dbName,s.state,s.town,s.address,s.pincode,s.beat,s.category,s.owner,s.ownerMob,s.reason,s.status]);});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(nsRows),"New Stores");
+  }
+  return wb;
+}
+function eodHasData(){var D=eodDayData();return !!((D.orders&&D.orders.length)||(D.stores&&D.stores.length));}
+function eodDownloadExcel(){var wb=eodBuildDayWorkbook();if(!wb){toast("Excel tool not loaded");return false;}try{XLSX.writeFile(wb,eodExcelFilename());return true;}catch(e){toast("Excel failed");return false;}}
+function eodDaySummaryTextFull(){
+  var D=eodDayData();var A=eodAgg(D.orders);
+  var placed=A.placed.length,noOrd=A.noorder.length,ns=(D.stores||[]).length;
+  var extra=["","*Created Today*","New Outlets: "+ns+(ns?" (details in Excel)":""),"Sec Orders: "+placed+(placed?" (details in Excel — manager can punch on app)":""),"No-Order / Cancel visits: "+noOrd];
+  return eodSummaryText(D,A)+"\n"+extra.join("\n");
+}
+// Web Share L2 (mobile): send summary text + Excel file together in one action.
+function eodShareViaFile(txt){
+  if(!eodHasData())return false;
+  if(typeof XLSX==="undefined"||typeof File==="undefined"||!navigator.canShare)return false;
+  try{
+    var wb=eodBuildDayWorkbook();var wbout=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    var file=new File([new Uint8Array(wbout)],eodExcelFilename(),{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    if(navigator.canShare({files:[file]})){navigator.share({files:[file],text:txt,title:"EOD Day Report"}).catch(function(){});return true;}
+  }catch(e){}
+  return false;
+}
+function eodSendWhatsApp(){
+  var txt=eodDaySummaryTextFull();window._lastEodMsg=txt;
+  if(eodShareViaFile(txt))return;
+  if(eodHasData()){eodDownloadExcel();toast("📊 Excel download hua — WhatsApp me attach karo");}
+  var rs=eodRecips();var mob=(rs[0]&&rs[0].mob)?rs[0].mob:"";
+  var n=String(mob||"").replace(/\D/g,"");if(n.length===10)n="91"+n;
+  window.open("https://wa.me/"+n+"?text="+encodeURIComponent(txt),"_blank");
+}
+function eodSendGmail(){
+  var txt=eodDaySummaryTextFull();window._lastEodMsg=txt;
+  var rs=eodRecips();var to=rs.filter(function(r){return r.email;}).map(function(r){return r.email;}).join(",");
+  var sub="EOD Day Summary — "+(elv("e_emp")||"")+" — "+ddmmyy(elv("e_date")||todayISO());
+  if(eodHasData()){eodDownloadExcel();toast("📊 Excel download hua — Gmail me attach karo");}
+  window.open("https://mail.google.com/mail/?view=cm&fs=1"+(to?("&to="+encodeURIComponent(to)):"")+"&su="+encodeURIComponent(sub)+"&body="+encodeURIComponent(txt),"_blank");
+}
+function eodRenderShareBottom(){
+  var box=document.getElementById("eod-out");if(!box)return;
+  var D=eodDayData();var A=eodAgg(D.orders);var placed=A.placed.length,ns=(D.stores||[]).length;
+  var h='<div class="card" style="margin-top:13px;border-left:4px solid #2f9e57"><h2><span class="dot"></span>📤 Send Day Report</h2>';
+  h+='<div class="note" style="margin:0 0 10px">Poore din ka summary jayega. '+((placed||ns)?('<b>'+placed+'</b> sec order · <b>'+ns+'</b> naye outlet — inki <b>Excel</b> bhi saath (manager designated app me punch kar sake).'):'Aaj koi order / outlet nahi bana.')+'</div>';
+  h+='<div class="row2"><button class="btn btn-wa" onclick="eodSendWhatsApp()">🟢 Send on WhatsApp</button><button class="btn btn-navy" onclick="eodSendGmail()">📧 Send on Gmail</button></div>';
+  if(eodHasData())h+='<button class="btn btn-ghost small" style="margin-top:8px" onclick="eodDownloadExcel()">📊 Download Excel</button>';
+  h+='<div class="hint" style="margin:10px 0 4px">Recipients (HOD / ZM / RSM / ASM):</div><div id="eod_ds_recips"></div>';
+  h+='</div>';box.innerHTML=h;eodRenderRecips();
 }
 
 function buildEodSummaryCardEl(){
@@ -6063,8 +6164,8 @@ function saSave(){
   var emp=elv("po_emp");if(!emp){toast("Select an employee");return;}
   var req=["sa_element","sa_type","sa_location","sa_brand","sa_asset","sa_period","sa_dominance","sa_condition","sa_visibility","sa_action","sa_installedby","sa_verifiedby"];
   for(var i=0;i<req.length;i++){if(!elv(req[i])){toast("Fill all checklist dropdowns");return;}}
-  if(!saState.photos.display||!saState.photos.store){toast("Capture Display & Store photo");return;}
   var date=elv("po_date")||todayISO();var s=poStore;
+  if(photoMandatory(date)&&(!saState.photos.display||!saState.photos.store)){toast("📸 Live date par Display & Store photo zaroori");return;}
   var rec={id:"SA_"+Date.now(),code:empCodeOf(emp)||"",emp:emp,date:date,posmStatus:"Installed",storeType:s.storeType||"",clientId:s.clientId||"",companyCode:s.companyCode||s.code||"",storeName:s.storeName||s.name||"",city:s.city||"",state:s.state||"",dbCode:s.dbCode||"",dbName:s.dbName||"",
     element:elv("sa_element"),posmType:elv("sa_type"),location:elv("sa_location"),brand:elv("sa_brand"),assetType:elv("sa_asset"),
     period:elv("sa_period"),dominance:elv("sa_dominance"),condition:elv("sa_condition"),visibility:elv("sa_visibility"),action:elv("sa_action"),
@@ -6081,10 +6182,10 @@ function saSave(){
 function saNoSave(){
   if(!poStore){toast("Select a store first");return;}
   var emp=elv("po_emp");if(!emp){toast("Select an employee");return;}
-  if(!saState.photos.inside||!saState.photos.outside){toast("Capture Inside & Outside photo");return;}
+  var date=elv("po_date")||todayISO();var s=poStore;
+  if(photoMandatory(date)&&(!saState.photos.inside||!saState.photos.outside)){toast("📸 Live date par Inside & Outside photo zaroori");return;}
   var reason=(elv("sa_no_reason")||"").trim();
   if(!reason){toast("Reason zaroori hai — POSM kyun nahi laga");return;}
-  var date=elv("po_date")||todayISO();var s=poStore;
   var rec={id:"SA_"+Date.now(),code:empCodeOf(emp)||"",emp:emp,date:date,posmStatus:"Not Installed",storeType:s.storeType||"",clientId:s.clientId||"",companyCode:s.companyCode||s.code||"",storeName:s.storeName||s.name||"",city:s.city||"",state:s.state||"",dbCode:s.dbCode||"",dbName:s.dbName||"",
     element:"",posmType:"",location:"",brand:"",assetType:"",period:"",dominance:"",condition:"",visibility:"",action:"",
     photoEvidence:"No",installedBy:"",verifiedBy:"",verifyDate:"",nextReview:"",
@@ -6156,8 +6257,8 @@ function reqSave(){
   if(!reqGateAnswer){toast("Select Requirement Yes/No first");return;}
   var remarks=elv("req_remarks")||"";
   if(!remarks.trim()){toast("Remarks mandatory");return;}
-  if(!reqState.photos.a||!reqState.photos.b){toast("Capture Inside & Outside photo");return;}
   var date=elv("po_date")||todayISO();var s=poStore;
+  if(photoMandatory(date)&&(!reqState.photos.a||!reqState.photos.b)){toast("📸 Live date par Inside & Outside photo zaroori");return;}
   var rec={id:"REQ_"+Date.now(),code:empCodeOf(emp)||"",emp:emp,date:date,storeType:s.storeType||"",clientId:s.clientId||"",companyCode:s.companyCode||s.code||"",storeName:s.storeName||s.name||"",city:s.city||"",state:s.state||"",dbCode:s.dbCode||"",dbName:s.dbName||"",
     requirement:reqGateAnswer,remarks:remarks,photoA:reqState.photos.a,photoB:reqState.photos.b,ts:nowTime()};
   var l=reqLoad();l.push(rec);reqSaveAll(l);
@@ -6853,6 +6954,10 @@ function getRole(){try{return localStorage.getItem(ROLE_KEY)||"admin";}catch(e){
 // (When an admin toggles to Employee mode to preview, getRole() is "employee" so gating returns.)
 function fullAccess(){try{return !!window.__BYPASS||getRole()==="admin";}catch(e){return !!window.__BYPASS;}}
 window.fullAccess=fullAccess;
+// Live camera is mandatory ONLY for a live (current-date) visit and when NOT bypassed.
+// Bypass mode or a back-dated entry (not today) → photo optional, rep can move ahead.
+function photoMandatory(dateStr){try{return (String(dateStr||"")===todayISO())&&!fullAccess();}catch(e){return !fullAccess();}}
+window.photoMandatory=photoMandatory;
 function setRole(r,el){
   // Check if bypass mode is active — override to admin if applies to current user
   var bypassActive=false;
