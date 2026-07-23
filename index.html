@@ -1823,16 +1823,15 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
 
       <div style="border:1px solid #e3ece5;border-radius:8px;padding:10px;margin-bottom:9px;background:#fafcfa">
         <div style="font-weight:800;font-size:12.5px;color:#0E4F3B;margin-bottom:4px">2️⃣ Stock Data — Store &amp; Distributor Link Stock</div>
-        <div class="hint" style="margin-bottom:6px">Distributor Stock</div>
+        <div class="hint" style="margin-bottom:6px">Distributor Stock <span class="hint">(.xlsx · .xlsb · .xls · .csv)</span></div>
         <div class="row2" style="margin-bottom:8px">
-          <label class="btn btn-ghost small" style="cursor:pointer"><span>⬆️ Import DB Stock</span><input type="file" accept=".xlsx,.xls" style="display:none" onchange="stImportDb(this)"></label>
-          <button class="btn btn-ghost small" onclick="stTemplateDb()">⬇️ DB Template</button>
+          <label class="btn btn-ghost small" style="cursor:pointer;background:#e6f4ea"><span>⬆️ Import DB Stock</span><input type="file" accept=".xlsx,.xlsb,.xls,.csv" style="display:none" onchange="stImportDb(this)"></label>
         </div>
-        <div class="hint" style="margin-bottom:6px">Mega BA &amp; BA Store Stock</div>
+        <div class="hint" style="margin-bottom:6px">Mega BA &amp; BA Store Stock <span class="hint">(.xlsx · .xlsb · .xls · .csv)</span></div>
         <div class="row2">
-          <label class="btn btn-ghost small" style="cursor:pointer"><span>⬆️ Import Store Stock</span><input type="file" accept=".xlsx,.xls" style="display:none" onchange="stImportBa(this)"></label>
-          <button class="btn btn-ghost small" onclick="stTemplateBa()">⬇️ Store Template</button>
+          <label class="btn btn-ghost small" style="cursor:pointer;background:#e6f4ea"><span>⬆️ Import Store Stock</span><input type="file" accept=".xlsx,.xlsb,.xls,.csv" style="display:none" onchange="stImportBa(this)"></label>
         </div>
+        <div class="hint" style="margin-top:6px">Headers apne aap detect hote hain (Distributor Code · Store Code · SKU / Product · Stock Qty etc.) — koi fixed column order zaroori nahi. Upload ke baad stock salesmen ki Stock tab me sync ho jaata hai.</div>
         <div id="st_admin_status" class="hint" style="margin-top:6px"></div>
       </div>
 
@@ -2379,6 +2378,7 @@ function planSubmitDeviation(){
   if(typeof devSaveAll==="function")devSaveAll(arr);
   try{if(window.__sync&&window.__sync.pushDeviation)window.__sync.pushDeviation(rec);}catch(e){}
   try{if(window.__sync&&window.__sync.pushMasterPjp)window.__sync.pushMasterPjp();}catch(e){}
+  try{logApprovalEvent({kind:"Plan Deviation",action:"Submitted",empCode:code,empName:rec.emp,refDate:date,details:(planned||"")+" → "+(actual||"")});}catch(e){}
   try{if(typeof updateApprBadge==="function")updateApprBadge();}catch(e){}
   return true;
 }
@@ -3455,10 +3455,11 @@ function pjpSubmit(){
   dr.status="Pending";dr.submittedAt=nowTime();dr.sentToHod=true;dr.rejectedDays=[];dr.rejectReason="";dr.updatedAt=Date.now();
   savePjpDraft(dr);
   try{if(window.__sync&&window.__sync.pushPjpDraft)window.__sync.pushPjpDraft(dr);}catch(e){}
+  try{logApprovalEvent({kind:"PJP",action:"Submitted",empCode:dr.code,empName:(typeof pjpEmpName==="function"?pjpEmpName(dr.code):dr.code),month:dr.month});}catch(e){}
   try{renderPjpList();}catch(e){}try{if(typeof renderCoverage==="function")renderCoverage();}catch(e){}try{if(typeof pjpNotify==="function")pjpNotify();}catch(e){}try{updateApprBadge();}catch(e){}
   var h='<div class="card" style="margin-top:13px;border-left:4px solid #C8A24B"><h2 style="color:#8a6a00"><span class="dot" style="background:#C8A24B"></span>\u23f3 Submitted for HOD Approval</h2>';
   h+='<div class="note" style="margin:0">PJP HOD ko approval ke liye chala gaya \u2014 dekhne ke liye <b>Summary \u2192 HOD Approvals</b>. Approve hote hi master update + Plan chalega. Reject hua to yahan dobara edit karke submit karein.</div>';
-  h+='<div class="note" style="margin:8px 0 0;background:#eff6ff;border-left:3px solid #0369a1;padding:7px 10px;border-radius:6px">\ud83d\ude97 Aapka poore month ka <b>TA/DA</b> ab <b>TA/DA tab</b> me ready hai (Station + distance ke hisaab se auto) \u2014 waha jaake amount check/edit kar sakte ho.</div></div>';
+  h+='<div class="note" style="margin:8px 0 0;background:#eff6ff;border-left:3px solid #0369a1;padding:7px 10px;border-radius:6px">\ud83d\ude97 Aapka poore month ka <b>TA/DA</b> ab <b>TA/DA tab</b> me ready hai (har din ke Station pick ke hisaab se) \u2014 waha jaake amount check/edit kar sakte ho.</div></div>';
   var _po=document.getElementById("pjp_out");if(_po){_po.innerHTML=h;if(_po.scrollIntoView)_po.scrollIntoView({behavior:"smooth",block:"start"});}
 }
 var PJP_FOCUS_ODD="TDC - Combo & Facewash";
@@ -3992,8 +3993,8 @@ function renderPjpList(){
     else if(off){h+='<div class="note" style="margin:5px 0 0;color:#8a3520;font-weight:600">'+escapeHtml(off)+'</div>';}
     else{
       h+='<div class="hint" style="margin-top:3px">\uD83C\uDFAF '+escapeHtml(pjpFocusForWeek(wk))+'</div>';
-      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div><div style="margin-top:5px">'+pjpStationBadgeHtml(dt,row.city||"")+'</div>';}
-      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpUpdateStationBadge(\''+dt+'\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div><div style="margin-top:5px">'+pjpStationBadgeHtml(dt,row.city||"")+'</div>';}
+      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div>';}
+      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div>';}
     }
     h+='</div>';
   });
@@ -4178,6 +4179,14 @@ function genMonthPjp(code,zone,month,days,offDays,status){
 }
 function pjpDayType(dr,date){var dow=new Date(date+"T00:00:00").getDay();if(dow===0)return {type:"Weekly Off"};var row=(dr.days&&dr.days[date])||{};var ww=row.ww||"Self Working";if(!pjpIsField(ww))return {type:"Filled"};if((row.city||"").trim()&&(row.beat||"").trim())return {type:"Filled"};return {type:"Unassigned"};}
 function pjpSetWw(sel){var dt=sel.getAttribute("data-dt");var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};dr.days[dt].ww=sel.value;savePjpDraft(dr);renderPjpList();renderCoverage();}
+/* Per-day Station for TA/DA: manual pick wins; else auto (city vs HQ distance); never "Unknown". */
+function pjpEffStation(dr,dt){
+  var row=(dr.days&&dr.days[dt])||{};
+  if(row.station==="HQ"||row.station==="Ex-HQ"||row.station==="Outstation")return row.station;
+  try{var a=(typeof pjpDayStationAuto==="function")?pjpDayStationAuto(dr,dt):null;if(a&&(a.status==="HQ"||a.status==="Ex-HQ"||a.status==="Outstation"))return a.status;}catch(e){}
+  return "HQ";
+}
+function pjpSetDayStation(sel){var dt=sel.getAttribute("data-dt");var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};dr.days[dt].station=sel.value;savePjpDraft(dr);}
 function pjpSetCell(dt,field,val){var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};dr.days[dt][field]=val;savePjpDraft(dr);renderCoverage();pjpUpdateCount();if(field==="city"){try{renderStationStatus();}catch(e){}}}
 
 /* ===== PJP per-day Station classification + TA/DA projection =====
@@ -4322,12 +4331,13 @@ function renderPjpList(){
     h+='<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+(sun?"#f0e6c8":(odd?"#efe8ff":"#e8f0ff"))+';color:'+(sun?"#8a6a00":(odd?"#5b3fa0":"#2a4d8f"))+'">'+wkTxt+'</span>';
     if(!sun&&!lock){h+='<select data-dt="'+dt+'" onchange="pjpSetWw(this)" style="width:auto;padding:3px 6px;font-size:11px;margin:0">'+WW_OPTS.map(function(o){return '<option value="'+escAttr(o[0])+'"'+(ww===o[0]?" selected":"")+'>'+escapeHtml(o[1])+'</option>';}).join("")+'</select>';}
     else if(!sun&&lock){h+='<span style="font-size:11px;font-weight:600;color:#3a4a3f">'+escapeHtml(ww)+'</span>';}
+    if(field){var _stc=pjpEffStation(dr,dt);var _stL={HQ:"🏛 HQ","Ex-HQ":"🏘 Ex-HQ",Outstation:"✈️ Outstation"};if(!lock){h+='<select data-dt="'+dt+'" onchange="pjpSetDayStation(this)" title="Station — TA/DA isi ke hisaab se banega" style="width:auto;padding:3px 6px;font-size:11px;margin:0;background:#f0f9ff">'+["HQ","Ex-HQ","Outstation"].map(function(o){return '<option value="'+o+'"'+(_stc===o?" selected":"")+'>'+_stL[o]+'</option>';}).join("")+'</select>';}else{h+='<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:#e8f0ff;color:#2a4d8f">'+_stL[_stc]+'</span>';}}
     h+='</span></div>';
     if(sun){}
     else if(field){
       h+='<div class="hint" style="margin-top:3px">\uD83C\uDFAF '+escapeHtml(pjpFocusForWeek(wk))+'</div>';
-      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div><div style="margin-top:5px">'+pjpStationBadgeHtml(dt,row.city||"")+'</div>';}
-      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpUpdateStationBadge(\''+dt+'\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div><div style="margin-top:5px">'+pjpStationBadgeHtml(dt,row.city||"")+'</div>';}
+      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div>';}
+      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div>';}
     }
     else{h+='<div class="note" style="margin:5px 0 0;color:#8a3520;font-weight:600">'+escapeHtml(ww)+'</div>';}
     h+='</div>';
@@ -5965,6 +5975,33 @@ function stPick(row,keys){
   for(var k in row){var nk=stHeaderNorm(k);for(var i=0;i<keys.length;i++){if(nk===keys[i])return row[k];}}
   return "";
 }
+// Known header tokens used to locate the header row (files may have title rows on top).
+function stHeaderTokens(){return ["skuproduct","sku","productcode","eancode","ean","stockqty","qty","quantity","stock","soh","closingstock","distributorcode","dbcode","distcode","storecode","companycode","clientid","distributorname","dbname","storename"];}
+// Robust sheet → array-of-objects: works for xlsx/xlsb/xls/csv, scans first sheets for a real
+// header row (so leading title/blank rows don't break it). Returns {rows, headers}.
+function stSheetToObjects(wb){
+  var names=(wb&&wb.SheetNames)||[];var toks=stHeaderTokens();
+  for(var s=0;s<names.length;s++){
+    var ws=wb.Sheets[names[s]];if(!ws)continue;
+    var aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:false,blankrows:false});
+    if(!aoa||!aoa.length)continue;
+    var hIdx=-1;
+    for(var i=0;i<Math.min(aoa.length,20);i++){
+      var norm=(aoa[i]||[]).map(function(c){return stHeaderNorm(c);});
+      if(norm.some(function(n){return n&&toks.indexOf(n)>=0;})){hIdx=i;break;}
+    }
+    if(hIdx<0)continue;
+    var headers=(aoa[hIdx]||[]).map(function(c){return String(c==null?"":c);});
+    var objs=[];
+    for(var r=hIdx+1;r<aoa.length;r++){
+      var arr=aoa[r]||[];var o={};var any=false;
+      for(var c2=0;c2<headers.length;c2++){var key=headers[c2];if(!key)continue;var v=arr[c2];o[key]=(v==null?"":v);if(String(v==null?"":v).trim())any=true;}
+      if(any)objs.push(o);
+    }
+    return {rows:objs,headers:headers};
+  }
+  return {rows:[],headers:[]};
+}
 
 function stStatus(msg,color){var b=document.getElementById("st_admin_status");if(b){b.innerHTML=msg;b.style.color=color||"#0369a1";}}
 function stImportDb(inp){
@@ -5975,7 +6012,7 @@ function stImportDb(inp){
   rd.onload=function(e){
     try{
       var wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
-      var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:"",raw:false});
+      var parsed=stSheetToObjects(wb);var rows=parsed.rows;
       var out=[];
       rows.forEach(function(r){
         var code=String(stPick(r,["skuproduct","sku","productcode","eancode","ean","code","product"])||"").trim();
@@ -6000,11 +6037,11 @@ function stImportDb(inp){
       var updatedAt=new Date().toISOString();stUpdatedSet(updatedAt);
       toast("Distributor stock imported: "+out.length+" line(s)");
       stRenderAdmin();if(stStore)stRenderStock();
-      if(!out.length){stStatus("⚠️ 0 lines imported — check headers (need Distributor Code · SKU / Product · Stock Qty)","#b91c1c");}
+      if(!out.length){stStatus("⚠️ 0 lines mile. File me ye headers hone chahiye: <b>Distributor Code · SKU / Product · Stock Qty</b>."+(parsed.headers.length?(" Detected headers: "+escapeHtml(parsed.headers.filter(Boolean).join(", "))):" (koi header row nahi mila)"),"#b91c1c");}
       else{stStatus("✅ Distributor Stock imported: <b>"+out.length+"</b> line(s) · ☁️ syncing to salesmen…","#166534");
         stPushStock("db",out,updatedAt);
-        setTimeout(function(){stStatus("✅ Distributor Stock imported: <b>"+out.length+"</b> line(s) · synced ("+ddmmyy(todayISO())+"). Salesmen will see it on next sync.","#166534");},1500);}
-    }catch(err){stStatus("❌ Import failed — file format check karo (.xlsx with header row)","#b91c1c");toast("Import failed — check file format");}
+        setTimeout(function(){stStatus("✅ Distributor Stock imported: <b>"+out.length+"</b> line(s) · synced ("+ddmmyy(todayISO())+"). Salesmen ko next sync pe dikhega.","#166534");},1500);}
+    }catch(err){stStatus("❌ Import fail — file .xlsx/.xlsb/.xls/.csv hona chahiye with a header row. ("+escapeHtml(String(err&&err.message||err))+")","#b91c1c");toast("Import failed — check file format");}
     inp.value="";
   };
   rd.readAsArrayBuffer(f);
@@ -6018,7 +6055,7 @@ function stImportBa(inp){
   rd.onload=function(e){
     try{
       var wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
-      var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:"",raw:false});
+      var parsed=stSheetToObjects(wb);var rows=parsed.rows;
       var out=[];
       rows.forEach(function(r){
         var code=String(stPick(r,["skuproduct","sku","productcode","eancode","ean","code","product"])||"").trim();
@@ -6043,11 +6080,11 @@ function stImportBa(inp){
       var updatedAt=new Date().toISOString();stUpdatedSet(updatedAt);
       toast("Store stock imported: "+out.length+" line(s)");
       stRenderAdmin();if(stStore)stRenderStock();
-      if(!out.length){stStatus("⚠️ 0 lines imported — check headers (need Store Code · SKU / Product · Stock Qty)","#b91c1c");}
+      if(!out.length){stStatus("⚠️ 0 lines mile. File me ye headers hone chahiye: <b>Store Code · SKU / Product · Stock Qty</b>."+(parsed.headers.length?(" Detected headers: "+escapeHtml(parsed.headers.filter(Boolean).join(", "))):" (koi header row nahi mila)"),"#b91c1c");}
       else{stStatus("✅ Store Stock imported: <b>"+out.length+"</b> line(s) · ☁️ syncing to salesmen…","#166534");
         stPushStock("ba",out,updatedAt);
-        setTimeout(function(){stStatus("✅ Store Stock imported: <b>"+out.length+"</b> line(s) · synced ("+ddmmyy(todayISO())+"). Salesmen will see it on next sync.","#166534");},1500);}
-    }catch(err){stStatus("❌ Import failed — file format check karo (.xlsx with header row)","#b91c1c");toast("Import failed — check file format");}
+        setTimeout(function(){stStatus("✅ Store Stock imported: <b>"+out.length+"</b> line(s) · synced ("+ddmmyy(todayISO())+"). Salesmen ko next sync pe dikhega.","#166534");},1500);}
+    }catch(err){stStatus("❌ Import fail — file .xlsx/.xlsb/.xls/.csv hona chahiye with a header row. ("+escapeHtml(String(err&&err.message||err))+")","#b91c1c");toast("Import failed — check file format");}
     inp.value="";
   };
   rd.readAsArrayBuffer(f);
@@ -7792,6 +7829,19 @@ function sessionIsAdminHod(){try{var s=JSON.parse(localStorage.getItem("me_em_se
 window.sessionIsAdminHod=sessionIsAdminHod;
 function apprIsHod(){return sessionIsAdminHod();}
 function apprMyCode(){try{var r=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};return r.on?r.code:"";}catch(e){return "";}}
+// Who is acting (from login session) — for the Approval_Log audit trail.
+function apprLogActor(){try{var s=JSON.parse(localStorage.getItem("me_em_session")||"null");if(!s)return {name:"",role:""};var r=String(s.rights||"");return {name:s.name||s.code||"",role:/admin/i.test(r)?"Admin":(/hod/i.test(r)?"HOD":"Salesman")};}catch(e){return {name:"",role:""};}}
+// Append one row to the "Approval_Log" sheet (HOD/Admin decisions + salesman submissions).
+function logApprovalEvent(ev){
+  try{
+    var a=apprLogActor();
+    var row={Id:"AL_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),Ts:(typeof nowTime==="function")?nowTime():new Date().toISOString(),
+      Kind:ev.kind||"",Action:ev.action||"",Actor:a.name,ActorRole:a.role,
+      EmpCode:ev.empCode||"",EmpName:ev.empName||"",RefDate:ev.refDate?ddmmyy(ev.refDate):"",Month:ev.month||"",
+      Details:ev.details||"",Reason:ev.reason||""};
+    if(window.__sync&&window.__sync.push)window.__sync.push("Approval_Log",[row],"Id");
+  }catch(e){}
+}
 // Pending items = submitted PJPs awaiting HOD + pending deviations (scoped to the viewer).
 function apprPjpPending(){var all=pjpLoad();var mine=apprMyCode();return Object.keys(all).map(function(k){return {key:k,dr:all[k]};}).filter(function(o){var dr=o.dr;if(!dr)return false;if(mine&&String(dr.code).toUpperCase()!==String(mine).toUpperCase())return false;return dr.status==="Pending"||dr.sentToHod;});}
 function apprDevPending(){var mine=apprMyCode();return devLoad().filter(function(d){if(mine&&String(d.code).toUpperCase()!==String(mine).toUpperCase())return false;return d.status==="Pending";});}
@@ -7880,8 +7930,8 @@ function apprDevCard(d,hod){
 }
 function apprPushDraft(key){try{var a=pjpLoad();if(a[key]&&window.__sync&&window.__sync.pushPjpDraft)window.__sync.pushPjpDraft(a[key]);}catch(e){}}
 function apprPushDev(d){try{if(d&&window.__sync&&window.__sync.pushDeviation)window.__sync.pushDeviation(d);}catch(e){}}
-function apprApprovePjp(key){if(!confirm("Poore month ka PJP approve karein?"))return;if(typeof pjpHodApproved==="function")pjpHodApproved(key);else{var a0=pjpLoad();if(a0[key]){a0[key].status="HOD-Approved";a0[key].hodAt=nowTime();pjpSaveAll(a0);}}var a=pjpLoad();if(a[key]){a[key].updatedAt=Date.now();a[key].rejectedDays=[];pjpSaveAll(a);}apprPushDraft(key);toast("✅ PJP approved");renderApprovals();}
-function apprRejectWhole(key){var why=prompt("Reject reason (poora month):");if(why==null)return;var a=pjpLoad();if(a[key]){a[key].status="Rejected";a[key].rejectReason="HOD: "+why;a[key].rejectedDays=[];a[key].updatedAt=Date.now();pjpSaveAll(a);}apprPushDraft(key);toast("Poora month reject — rep dobara bharega");renderApprovals();}
+function apprApprovePjp(key){if(!confirm("Poore month ka PJP approve karein?"))return;if(typeof pjpHodApproved==="function")pjpHodApproved(key);else{var a0=pjpLoad();if(a0[key]){a0[key].status="HOD-Approved";a0[key].hodAt=nowTime();pjpSaveAll(a0);}}var a=pjpLoad();if(a[key]){a[key].updatedAt=Date.now();a[key].rejectedDays=[];pjpSaveAll(a);}apprPushDraft(key);try{var dA=a[key]||{};logApprovalEvent({kind:"PJP",action:"Approved",empCode:dA.code,empName:apprEmpName(dA.code),month:dA.month});}catch(e){}toast("✅ PJP approved");renderApprovals();}
+function apprRejectWhole(key){var why=prompt("Reject reason (poora month):");if(why==null)return;var a=pjpLoad();if(a[key]){a[key].status="Rejected";a[key].rejectReason="HOD: "+why;a[key].rejectedDays=[];a[key].updatedAt=Date.now();pjpSaveAll(a);}apprPushDraft(key);try{var dR=a[key]||{};logApprovalEvent({kind:"PJP",action:"Rejected (whole month)",empCode:dR.code,empName:apprEmpName(dR.code),month:dR.month,reason:why});}catch(e){}toast("Poora month reject — rep dobara bharega");renderApprovals();}
 function apprRejOpen(key){_apprRejKey=key;renderApprovals();}
 function apprRejCancel(){_apprRejKey=null;renderApprovals();}
 function apprSubmitDayReject(key){
@@ -7889,10 +7939,10 @@ function apprSubmitDayReject(key){
   if(!days.length){toast("Kam se kam ek din select karo");return;}
   var why=(document.getElementById("appr_rej_reason")||{}).value||"";
   var a=pjpLoad();if(a[key]){a[key].status="Rejected";a[key].rejectedDays=days;a[key].rejectReason="HOD: "+(why||"in dino ko change karo");a[key].updatedAt=Date.now();pjpSaveAll(a);}
-  apprPushDraft(key);_apprRejKey=null;toast("✖ Selected days rejected — rep ko notify");renderApprovals();
+  apprPushDraft(key);try{var dD=a[key]||{};logApprovalEvent({kind:"PJP",action:"Rejected (specific days)",empCode:dD.code,empName:apprEmpName(dD.code),month:dD.month,details:days.map(function(x){return ddmmyy(x);}).join(", "),reason:why});}catch(e){}_apprRejKey=null;toast("✖ Selected days rejected — rep ko notify");renderApprovals();
 }
-function apprApproveDev(id){var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Approved";a[i].hodRemarks="HOD approved";a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);try{if(window.__sync&&window.__sync.pushMasterPjp)window.__sync.pushMasterPjp();}catch(e){}toast("✅ Deviation approved");renderApprovals();}
-function apprRejectDev(id){var why=prompt("Reject reason:");if(why==null)return;var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Rejected";a[i].hodRemarks="HOD: "+why;a[i].rejectCount=(a[i].rejectCount||0)+1;a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);try{if(window.__sync&&window.__sync.pushMasterPjp)window.__sync.pushMasterPjp();}catch(e){}toast("✖ Deviation rejected");renderApprovals();}
+function apprApproveDev(id){var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Approved";a[i].hodRemarks="HOD approved";a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);try{if(window.__sync&&window.__sync.pushMasterPjp)window.__sync.pushMasterPjp();}catch(e){}try{if(hit)logApprovalEvent({kind:"Plan Deviation",action:"Approved",empCode:hit.code,empName:hit.emp||apprEmpName(hit.code),refDate:hit.date,details:(hit.plannedWw||"")+" → "+(hit.actualWw||"")});}catch(e){}toast("✅ Deviation approved");renderApprovals();}
+function apprRejectDev(id){var why=prompt("Reject reason:");if(why==null)return;var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Rejected";a[i].hodRemarks="HOD: "+why;a[i].rejectCount=(a[i].rejectCount||0)+1;a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);try{if(window.__sync&&window.__sync.pushMasterPjp)window.__sync.pushMasterPjp();}catch(e){}try{if(hit)logApprovalEvent({kind:"Plan Deviation",action:"Rejected",empCode:hit.code,empName:hit.emp||apprEmpName(hit.code),refDate:hit.date,details:(hit.plannedWw||"")+" → "+(hit.actualWw||""),reason:why});}catch(e){}toast("✖ Deviation rejected");renderApprovals();}
 /* ═══════════════ end HOD APPROVALS MODULE ═══════════════ */
 
 /* ═══════════════ PENDING ORDERS MODULE ═══════════════ */
@@ -9385,13 +9435,13 @@ function tadaPjpProject(code,month){
     var row=(dr.days&&dr.days[dt]);if(!row)return;
     var ww=row.ww||"Self Working";if(!pjpIsField(ww))return;
     var city=(row.city||"").trim();
-    var st=(window.__station&&window.__station.computeStationStatus)?window.__station.computeStationStatus(hq,city):{status:"Unknown",km:null};
-    var km=(st.km!=null)?Math.round(st.km):0;var travel=0,da=0;
-    if(st.status==="HQ"){da=rates.localDA;}
-    else if(st.status==="Ex-HQ"){travel=2*km*rates.perKm2w;da=rates.localDA;}
-    else if(st.status==="Outstation"){travel=1*km*rates.perKm2w;da=rates.outDA;}
-    var proj=(st.status==="Unknown")?null:(travel+da);
-    rows.push({date:dt,city:city,beat:row.beat||"",ww:ww,station:st.status,km:st.km,travel:travel,da:da,proj:proj});
+    // Station = the rep's per-day pick in PJP (auto-guess only as a silent default); NO distance/km.
+    var auto=(window.__station&&window.__station.computeStationStatus)?window.__station.computeStationStatus(hq,city):{status:"HQ"};
+    var station=(row.station==="HQ"||row.station==="Ex-HQ"||row.station==="Outstation")?row.station:((auto.status==="HQ"||auto.status==="Ex-HQ"||auto.status==="Outstation")?auto.status:"HQ");
+    // TA/DA is station-based only: HQ & Ex-HQ → Local DA; Outstation → Outstation DA. Rep edits for travel/actuals.
+    var da=(station==="Outstation")?rates.outDA:rates.localDA;
+    var proj=da;
+    rows.push({date:dt,city:city,beat:row.beat||"",ww:ww,station:station,da:da,proj:proj});
   });
   return {dr:dr,hq:hq,desig:desig,rates:rates,rows:rows};
 }
@@ -9426,22 +9476,21 @@ function tadaPjpRender(){
   var h='<div style="font-size:11.5px;color:#475569;margin-bottom:6px">Designation: <b>'+escapeHtml(p.desig)+'</b> · HQ: <b>'+escapeHtml(p.hq||"—")+'</b> · '+p.rows.length+' field days · <span style="color:#166534;font-weight:700">'+escapeHtml(String(dr.status||"Submitted"))+'</span></div>';
   h+='<div style="overflow-x:auto"><table style="width:100%;font-size:11.5px;border-collapse:collapse">';
   h+='<thead><tr style="background:#0f172a;color:#fff">';
-  ["Date","City","Station","KM","Proj ₹","TA/DA ₹ (edit)"].forEach(function(x){h+='<th style="padding:6px;border:1px solid #334155;text-align:left;white-space:nowrap">'+x+'</th>';});
+  ["Date","City","Station","DA ₹","TA/DA ₹ (edit)"].forEach(function(x){h+='<th style="padding:6px;border:1px solid #334155;text-align:left;white-space:nowrap">'+x+'</th>';});
   h+='</tr></thead><tbody>';
   p.rows.forEach(function(r){
     var c=C[r.station];var a=tadaPjpAmount(code,month,r.date,r.proj);
     h+='<tr>';
     h+='<td style="padding:5px;border:1px solid #e5e7eb;white-space:nowrap">'+ddmmyy(r.date)+'</td>';
     h+='<td style="padding:5px;border:1px solid #e5e7eb">'+escapeHtml(r.city||"—")+'</td>';
-    h+='<td style="padding:5px;border:1px solid #e5e7eb;white-space:nowrap"><span style="font-weight:700;padding:1px 6px;border-radius:6px;background:'+(c?c[0]:"#f1f5f9")+';color:'+(c?c[1]:"#64748b")+'">'+(c?c[2]:"❓ Unknown")+'</span></td>';
-    h+='<td style="padding:5px;border:1px solid #e5e7eb">'+(r.km!=null?Math.round(r.km):"—")+'</td>';
-    h+='<td style="padding:5px;border:1px solid #e5e7eb;white-space:nowrap">'+(r.proj==null?"—":("₹"+Math.round(r.proj)))+'</td>';
+    h+='<td style="padding:5px;border:1px solid #e5e7eb;white-space:nowrap"><span style="font-weight:700;padding:1px 6px;border-radius:6px;background:'+(c?c[0]:"#f1f5f9")+';color:'+(c?c[1]:"#64748b")+'">'+(c?c[2]:escapeHtml(r.station))+'</span></td>';
+    h+='<td style="padding:5px;border:1px solid #e5e7eb;white-space:nowrap">₹'+Math.round(r.da)+'</td>';
     h+='<td style="padding:5px;border:1px solid #e5e7eb"><input type="number" min="0" value="'+(a.amt==null?"":a.amt)+'" oninput="tadaPjpSetAmount(\''+code+'\',\''+month+'\',\''+r.date+'\',this.value)" style="width:82px;padding:3px 6px;font-size:11px;margin:0">'+(a.manual?' <span class="hint">(edited)</span>':'')+'</td>';
     h+='</tr>';
   });
   h+='</tbody></table></div>';
   h+='<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;background:#0369a1;color:#fff;border-radius:8px;padding:8px 11px"><span style="font-weight:700">Monthly TA/DA Total</span><span style="font-weight:800;font-size:14px" id="tada_pjp_total">₹0</span></div>';
-  h+='<div class="hint" style="margin-top:6px">Auto: HQ &amp; Ex-HQ → Local DA · Outstation → Outstation DA. Travel = Ex-HQ round-trip / Outstation one-way × 2-wheeler rate × distance. Amount edit karke apne actuals daal sakte ho — total auto update ho jayega. "❓ Unknown" = city distance DB me nahi (Data tab me coordinates add karo, ya amount manually daalo).</div>';
+  h+='<div class="hint" style="margin-top:6px">Station har din PJP me pick hota hai (HQ / Ex-HQ / Outstation). DA: HQ &amp; Ex-HQ → Local DA · Outstation → Outstation DA (designation ke rates se). Travel/lodging jaisa actual ho, "TA/DA ₹" me edit karke daal do — total auto update ho jayega.</div>';
   box.innerHTML=h;
   tadaPjpUpdateTotal(code,month);
 }
@@ -10151,34 +10200,33 @@ function tadaFillClaimDesigDropdown(){
       h+='<thead><tr style="background:#0f172a;color:white">';
       ["#","City","Distance (KM)","Station Status"].forEach(function(x){h+='<th style="padding:6px;border:1px solid #334155;text-align:left">'+x+'</th>';});
       h+='</tr></thead><tbody>';
-      // Summary counters
-      var counts={HQ:0,"Ex-HQ":0,Outstation:0,Unknown:0};
+      // Per-city station from the rep's per-day pick (distance auto as fallback) — never "Unknown"
+      var cityStation={};
+      if(draft&&draft.days){for(var dd in draft.days){var rr=draft.days[dd];if(rr&&rr.city){var cks=normalize(rr.city);var es=(typeof pjpEffStation==="function")?pjpEffStation(draft,dd):"";if(es!=="HQ"&&es!=="Ex-HQ"&&es!=="Outstation"){var au0=computeStationStatus(hqTown,rr.city);es=(au0.status==="HQ"||au0.status==="Ex-HQ"||au0.status==="Outstation")?au0.status:"HQ";}cityStation[cks]=es;}}}
+      var SL={HQ:["🏛 Head Quarter","#065f46"],"Ex-HQ":["🏘 Ex-Head Quarter","#1e40af"],Outstation:["✈️ Outstation","#7c2d12"]};
+      var counts={HQ:0,"Ex-HQ":0,Outstation:0};
       cityKeys.sort();
       cityKeys.forEach(function(k,i){
         var displayCity=cities[k];
-        var st=computeStationStatus(hqTown,displayCity);
-        counts[st.status]=(counts[st.status]||0)+1;
+        var stat=cityStation[k]||"HQ";counts[stat]=(counts[stat]||0)+1;
+        var dk=computeStationStatus(hqTown,displayCity);
         h+='<tr>';
         h+='<td style="padding:5px;border:1px solid #e5e7eb;text-align:center">'+(i+1)+'</td>';
         h+='<td style="padding:5px;border:1px solid #e5e7eb;font-weight:700">'+displayCity+'</td>';
-        h+='<td style="padding:5px;border:1px solid #e5e7eb">'+(st.km===null?"—":(st.status==="HQ"?"0 KM (same city)":Math.round(st.km)+" KM"))+'</td>';
-        h+='<td style="padding:5px;border:1px solid #e5e7eb;font-weight:800;color:'+st.color+'">'+st.label+(!st.known&&st.missing?' <span class="hint" style="font-weight:400">'+st.missing.join(", ")+' not in DB</span>':"")+'</td>';
+        h+='<td style="padding:5px;border:1px solid #e5e7eb">'+(dk.km===null?"—":(dk.status==="HQ"?"0 KM":Math.round(dk.km)+" KM"))+'</td>';
+        h+='<td style="padding:5px;border:1px solid #e5e7eb;font-weight:800;color:'+SL[stat][1]+'">'+SL[stat][0]+'</td>';
         h+='</tr>';
       });
       h+='</tbody></table></div>';
 
-      // Summary chips
+      // Summary chips (no "Unknown" — station is a definite per-day pick)
       h+='<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;font-size:11px">';
       h+='<span style="padding:4px 10px;background:#d1fae5;color:#065f46;border-radius:20px;font-weight:700">🏛 Head Quarter: '+(counts.HQ||0)+'</span>';
       h+='<span style="padding:4px 10px;background:#dbeafe;color:#1e40af;border-radius:20px;font-weight:700">🏘 Ex-HQ: '+(counts["Ex-HQ"]||0)+'</span>';
       h+='<span style="padding:4px 10px;background:#fed7aa;color:#7c2d12;border-radius:20px;font-weight:700">✈️ Outstation: '+(counts.Outstation||0)+'</span>';
-      if(counts.Unknown)h+='<span style="padding:4px 10px;background:#fef3c7;color:#78350f;border-radius:20px;font-weight:700">❓ Unknown: '+counts.Unknown+'</span>';
       h+='<span style="padding:4px 10px;background:#f1f5f9;color:#334155;border-radius:20px;font-weight:700">Total: '+cityKeys.length+' cities</span>';
       h+='</div>';
-
-      if(counts.Unknown){
-        h+='<div class="hint" style="margin-top:8px;padding:8px;background:#fef9c3;border-left:3px solid #f59e0b;border-radius:4px;font-size:11px">⚠️ Kuch cities database me nahi hain — distance calculate nahi ho paayi. Admin (Data tab) me City Coordinates upload/add karke fix karo.</div>';
-      }
+      h+='<div class="hint" style="margin-top:8px;font-size:11px">Station har din Month Plan me manually set/change kar sakte ho (Working-With ke saath wala dropdown). TA/DA isi ke hisaab se banega.</div>';
     }
     box.innerHTML=h;
   }
