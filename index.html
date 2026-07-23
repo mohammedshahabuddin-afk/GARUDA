@@ -368,6 +368,7 @@ input.locked{background:#f1f4f2;color:#5b6b64;font-weight:700}
 .approve-box{border:1px dashed #d6a44b;background:#fffdf6;border-radius:10px;padding:10px;margin-top:8px}
 .masterbar{font-size:12px;color:#5b6b64;margin-top:6px}
 
+.appr-badge{display:inline-block;min-width:18px;padding:0 6px;height:18px;line-height:18px;text-align:center;font-size:11px;font-weight:800;color:#fff;background:#b4432f;border-radius:20px;margin-left:4px;vertical-align:middle}
 .pjp-hint{font-size:12.5px;color:#2c5f2d;background:#eef4ef;border-radius:8px;padding:7px 10px;margin-top:6px}
 .pjp-hint.off{color:#b4432f;background:#fdeeea}
 .pjp-hint.none{color:#8a6d1b;background:#fff8e6}
@@ -1382,11 +1383,10 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
     </div>
     <!-- pending banner moved to global (top of every tab) -->
     <div class="seg" id="sum_view_seg" style="margin-bottom:12px">
-      <button class="seg-btn on" data-v="mine" onclick="sumView('mine',this)">👤 My Summary</button>
-      <button class="seg-btn" data-v="team" onclick="sumView('team',this)">👥 Team → HOD</button>
-      <button class="seg-btn" data-v="dash" onclick="sumView('dash',this)">📊 Dashboard</button>
-      <button class="seg-btn" data-v="overview" onclick="sumView('overview',this)">🆕 Overview</button>
+      <button class="seg-btn on" data-v="overview" onclick="sumView('overview',this)">📊 Dashboard</button>
+      <button class="seg-btn" data-v="approvals" onclick="sumView('approvals',this)">✅ HOD Approvals <span id="sum_appr_badge" class="appr-badge" style="display:none"></span></button>
     </div>
+    <div id="sum_approvals_wrap" style="display:none"></div>
     <div id="sum_mine_wrap">
       <div class="card">
         <h2><span class="dot"></span>My Summary</h2>
@@ -1550,7 +1550,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
         <div class="role-tabs">
           <button class="role-btn on" data-r="self" onclick="ovRole('self',this)">👤 Self</button>
           <button class="role-btn" data-r="team" onclick="ovRole('team',this)">👥 Sales Team</button>
-          <button class="role-btn dis" data-r="ba" onclick="ovRole('ba',this)">🎓 BA Supervisor</button>
+          <button class="role-btn" data-r="ba" onclick="ovRole('ba',this)">🎓 BA Supervisor</button>
         </div>
         <div class="card"><h2 style="justify-content:space-between"><span><span class="dot"></span>Employee Performance</span><span class="hint" id="ov_team_note" style="font-weight:500;text-transform:none;letter-spacing:0"></span></h2><div id="ov_team_body"></div></div>
       </div>
@@ -2119,7 +2119,7 @@ function go(v,el){
   document.querySelectorAll(".nav-scroll button").forEach(function(b){b.classList.remove("on");});
   if(el){el.classList.add("on");try{_navEnsureVisible(el);}catch(e){}}
   window.scrollTo(0,0);
-  if(v==="sum"){renderMySummary();renderSummary();renderHodSummary();if(typeof renderOverview==="function")renderOverview();}
+  if(v==="sum"){if(typeof renderOverview==="function")renderOverview();if(typeof updateApprBadge==="function")updateApprBadge();}
   if(v==="pjp")pjpRefresh();
   if(v==="field"){syncFieldFromPlan();fieldRefresh();}
   if(v==="eod")prefillEod();
@@ -2480,7 +2480,7 @@ function rejectCity(i){var pend=pendCities();pend.splice(i,1);savePendCities(pen
 
 
 /* ---------------- SAVE PLAN ---------------- */
-function savePlan(){var m=loadMaster();var name=elv("p_emp_name"),code=elv("p_emp_code"),date=elv("p_date");if(!name){toast("Select an employee");return;}if(!date){toast("Pick a date");return;}if(!fullAccess()&&!planPjpOk()){toast("Pehle is month ka PJP approve karwao - PJP tab");gotoPjpFromPlan();return;}var emp=m?m.employees.filter(function(e){return e.code===code||e.name===name;})[0]:null;var ww=elv("p_ww");var field=isFieldWork(ww);var town="",beat="",focus="",week="",offpjp=false,approval="";if(field){var yes=document.querySelector("#p_town_seg .seg-btn.on").dataset.v==="yes";if(yes){town=elv("p_town_pjp");beat=elv("p_beat_pjp");var pr=pjpForDate(code,date);week=pr?pr.week:"";focus=document.getElementById("p_focus_box").dataset.focus||"";}else{town=elv("p_town_other_sel").trim();if(town==="__add__"){toast("Add & submit the new city first");return;}beat=elv("p_beat_other").trim();focus=elv("p_focus_other").trim();offpjp=true;}if(!town){toast("Select / enter town");return;}}else{if(ww==="Meeting / Activity"){if(!elv("p_ww_remark").trim()){toast("Please enter remarks");return;}}if((ww==="Leave"||ww==="Sick Leave")&&wwNeedsApproval()){if(!elv("p_ww_leave_reason").trim()){toast("Please enter the reason");return;}if(!elv("p_ww_leave_remark").trim()){toast("Please enter remarks");return;}}}if(!fullAccess()&&wwNeedsApproval()){if(HODstate.decision==="rej"){toast("Not approved — revert to planned PJP");return;}if(HODstate.decision!=="app"){toast("HOD approval needed before saving");return;}approval="Approved";}var wwFull=ww;if(ww==="ME Sales Team"||ww==="BA Supervisor"){var wwName=elv("p_ww_name").trim();wwFull=ww+(wwName?(" — "+wwName):"");}else if(ww==="Meeting / Activity"){var at=elv("p_ww_acttype"),dur=elv("p_ww_dur"),rmk=elv("p_ww_remark").trim();wwFull="Meeting/Activity"+(at?(" — "+at):"")+(dur?(" ("+dur+")"):"")+(rmk?(" · "+rmk):"");}else if(ww==="Leave"||ww==="Sick Leave"){var rs=elv("p_ww_leave_reason").trim(),rm=elv("p_ww_leave_remark").trim();wwFull=ww+(rs?(" — "+rs):"")+(rm?(" · "+rm):"");}var tgt=null;if(field){var T=DAILY_ORDER_TGT;tgt={fixed:true,totalDay:T.totalDay,mtd:T.mtd,mtdDays:T.mtdDays,tdc:T.tdcSub,BB:0.25,AQ:0.15,DRS:0.10,CC:0.10};}var db=load();var id=recId(name,date);var r=db[id]||{};r.date=date;r.employee=name;r.code=code;r.zone=emp?emp.zone:"";r.hq=emp?emp.hq:"";r.desig=emp?emp.desig:"";r.town=town;r.beat=beat;r.focus=focus;r.week=week;r.offpjp=offpjp;r.approval=approval;r.workingWith=wwFull;r.sc=field?num(elv("p_sc")):0;r.nsoPlan=field?num(elv("p_nso")):0;r.posmPlan=field?num(elv("p_posm")):0;r.tgt=tgt;r.planTime=nowTime();r.planDone=true;db[id]=r;save(db);toast("Plan saved ✓");document.getElementById("plan-out").innerHTML=planMsgHtml(r);updatePlanStatus();}
+function savePlan(){var m=loadMaster();var name=elv("p_emp_name"),code=elv("p_emp_code"),date=elv("p_date");if(!name){toast("Select an employee");return;}if(!date){toast("Pick a date");return;}if(!fullAccess()&&!planPjpOk()){toast("Pehle is month ka PJP approve karwao - PJP tab");gotoPjpFromPlan();return;}var emp=m?m.employees.filter(function(e){return e.code===code||e.name===name;})[0]:null;var ww=elv("p_ww");var field=isFieldWork(ww);var town="",beat="",focus="",week="",offpjp=false,approval="";if(field){var yes=document.querySelector("#p_town_seg .seg-btn.on").dataset.v==="yes";if(yes){town=elv("p_town_pjp");beat=elv("p_beat_pjp");var pr=pjpForDate(code,date);week=pr?pr.week:"";focus=document.getElementById("p_focus_box").dataset.focus||"";}else{town=elv("p_town_other_sel").trim();if(town==="__add__"){toast("Add & submit the new city first");return;}beat=elv("p_beat_other").trim();focus=elv("p_focus_other").trim();offpjp=true;}if(!town){toast("Select / enter town");return;}}else{if(ww==="Meeting / Activity"){if(!elv("p_ww_remark").trim()){toast("Please enter remarks");return;}}if((ww==="Leave"||ww==="Sick Leave")&&wwNeedsApproval()){if(!elv("p_ww_leave_reason").trim()){toast("Please enter the reason");return;}if(!elv("p_ww_leave_remark").trim()){toast("Please enter remarks");return;}}}if(!fullAccess()&&wwNeedsApproval()){if(HODstate.decision==="rej"){toast("Not approved — revert to planned PJP");return;}if(HODstate.decision!=="app"){toast("HOD approval needed before saving");return;}approval="Approved";}var wwFull=ww;if(ww==="ME Sales Team"||ww==="BA Supervisor"){var wwName=elv("p_ww_name").trim();wwFull=ww+(wwName?(" — "+wwName):"");}else if(ww==="Meeting / Activity"){var at=elv("p_ww_acttype"),dur=elv("p_ww_dur"),rmk=elv("p_ww_remark").trim();wwFull="Meeting/Activity"+(at?(" — "+at):"")+(dur?(" ("+dur+")"):"")+(rmk?(" · "+rmk):"");}else if(ww==="Leave"||ww==="Sick Leave"){var rs=elv("p_ww_leave_reason").trim(),rm=elv("p_ww_leave_remark").trim();wwFull=ww+(rs?(" — "+rs):"")+(rm?(" · "+rm):"");}var tgt=null;if(field){var T=DAILY_ORDER_TGT;tgt={fixed:true,totalDay:T.totalDay,mtd:T.mtd,mtdDays:T.mtdDays,tdc:T.tdcSub,BB:0.25,AQ:0.15,DRS:0.10,CC:0.10};}var db=load();var id=recId(name,date);var r=db[id]||{};r.date=date;r.employee=name;r.code=code;r.zone=emp?emp.zone:"";r.hq=emp?emp.hq:"";r.desig=emp?emp.desig:"";r.town=town;r.beat=beat;r.focus=focus;r.week=week;r.offpjp=offpjp;r.approval=approval;r.workingWith=wwFull;r.sc=field?num(elv("p_sc")):0;r.nsoPlan=field?num(elv("p_nso")):0;r.posmPlan=field?num(elv("p_posm")):0;r.tgt=tgt;r.planTime=nowTime();r.planDone=true;db[id]=r;save(db);try{recordPlanDeviation(r);}catch(e){}toast("Plan saved ✓");document.getElementById("plan-out").innerHTML=planMsgHtml(r);updatePlanStatus();}
 function planMsgHtml(r){window._lastPlanRec=r;return msgActions(buildPlanMsg(r),"Plan ready \u2014 send to HOD / ZM / RSM / ASM",true);}
 function buildPlanMsg(r){
   var m=loadMaster();var grp=(m&&m.config.Group_Name)?m.config.Group_Name:"";
@@ -3338,16 +3338,33 @@ function buildPjpMsg(dr,emp,hod){
   dr.beats.forEach(function(b,i){var dtxt=(b.freq==="Daily")?"All days":b.days.map(function(d){return names[d];}).join(",");L.push((i+1)+". "+b.beat+" ("+b.city+") \u2014 "+b.freq+" ["+dtxt+"]");});
   L.push("");L.push(dr.beats.length+" beats. Approve karein toh master me update ho jayega.");return L.join("\n");
 }
+// Monthly PJP submission window = 27th of previous month → 1st of the target month.
+// Admin/HOD (fullAccess) always open; a per-salesman override (windowOpenUntil) can extend it.
+function pjpWindowOpen(month,dr){
+  if(fullAccess())return true;
+  if(!month)return false;
+  var today=new Date();today.setHours(0,0,0,0);
+  var y=+month.slice(0,4),mo=+month.slice(5,7);
+  var firstOfM=new Date(y,mo-1,1);firstOfM.setHours(0,0,0,0);
+  var win27=new Date(y,mo-2,27);win27.setHours(0,0,0,0);
+  if(today>=win27&&today<=firstOfM)return true;
+  if(dr&&dr.windowOpenUntil){var u=new Date(dr.windowOpenUntil+"T23:59:59");if(!isNaN(u.getTime())&&today<=u)return true;}
+  return false;
+}
 function pjpSubmit(){
   var dr=getPjpDraft();
   if(!dr){toast("Employee + month select karein");return;}
-  if(!dr.beats.length){toast("Kam se kam ek beat add karein");return;}
+  var dayCount=dr.days?Object.keys(dr.days).length:0;
+  if(!dayCount){toast("Pehle month ke din plan karo");return;}
   if(!pjpEditable(dr)){toast("Already submitted / approved");return;}
-  var _cov=pjpCoverage(dr);if(_cov.missing.length){toast("Pehle poora month cover karein ("+_cov.missing.length+" din pending)");return;}
-  dr.status="Pending";dr.submittedAt=nowTime();savePjpDraft(dr);renderPjpList();renderOffDays();renderCoverage();pjpNotify();
-  var h='<div class="card" style="margin-top:13px;border-left:4px solid #C8A24B"><h2 style="color:#8a6a00"><span class="dot" style="background:#C8A24B"></span>\u23f3 Submitted for Review</h2>';
-  h+='<div class="note" style="margin:0">PJP <b>Admin</b> ko review ke liye chala gaya. Admin (Data tab) Accept/Reject karega \u2014 Accept hote hi master update + Plan chalega. Reject hua to yahan dobara edit karke submit karein.</div></div>';
-  var _po=document.getElementById("pjp_out");_po.innerHTML=h;if(_po.scrollIntoView)_po.scrollIntoView({behavior:"smooth",block:"start"});
+  if(!pjpWindowOpen(dr.month,dr)){toast("⛔ Submission window band (27–1 hi allowed). HOD se window khulwao.");return;}
+  dr.status="Pending";dr.submittedAt=nowTime();dr.sentToHod=true;dr.rejectedDays=[];dr.rejectReason="";dr.updatedAt=Date.now();
+  savePjpDraft(dr);
+  try{if(window.__sync&&window.__sync.pushPjpDraft)window.__sync.pushPjpDraft(dr);}catch(e){}
+  try{renderPjpList();}catch(e){}try{if(typeof renderCoverage==="function")renderCoverage();}catch(e){}try{if(typeof pjpNotify==="function")pjpNotify();}catch(e){}try{updateApprBadge();}catch(e){}
+  var h='<div class="card" style="margin-top:13px;border-left:4px solid #C8A24B"><h2 style="color:#8a6a00"><span class="dot" style="background:#C8A24B"></span>\u23f3 Submitted for HOD Approval</h2>';
+  h+='<div class="note" style="margin:0">PJP HOD ko approval ke liye chala gaya \u2014 dekhne ke liye <b>Summary \u2192 HOD Approvals</b>. Approve hote hi master update + Plan chalega. Reject hua to yahan dobara edit karke submit karein.</div></div>';
+  var _po=document.getElementById("pjp_out");if(_po){_po.innerHTML=h;if(_po.scrollIntoView)_po.scrollIntoView({behavior:"smooth",block:"start"});}
 }
 var PJP_FOCUS_ODD="TDC - Combo & Facewash";
 var PJP_FOCUS_EVEN="All Emerging Brand (Excluding TDC)";
@@ -3475,7 +3492,13 @@ function pjpHodRejected(key){
 }
 function pjpEmailEmp(key,mode){var dr=pjpLoad()[key];if(!dr)return;var m=loadMaster();var e=empByAny(m,dr.code,"","","code");var to=TEST_ROUTE_TO_ADMIN?((m&&m.config.Admin_Email_ID)||(e&&e.email)||""):((e&&e.email)||"");if(!to){toast("Email nahi hai");return;}var nm=(e&&e.name)||dr.code;var sub,body;if(mode==="app"){sub="PJP Approved \u2014 "+monthName(dr.month);body="Hi "+nm+",\n\nAapka "+monthName(dr.month)+" ka PJP HOD ne approve kar diya hai. Coverage as per plan start karein.\n\nRegards,\nEmerging Brands";}else{sub="PJP Rejected \u2014 "+monthName(dr.month);body="Hi "+nm+",\n\nAapka "+monthName(dr.month)+" ka PJP HOD ne reject kiya. Reason: "+(dr.rejectReason||"").replace(/^HOD: /,"")+".\nKripya modify karke dobara submit karein.\n\nRegards,\nEmerging Brands";}window.open("mailto:"+to+"?subject="+encodeURIComponent(sub)+"&body="+encodeURIComponent(body),"_blank");}
 var _minePeriod="month";
-function sumView(v,el){document.querySelectorAll("#sum_view_seg .seg-btn").forEach(function(b){b.classList.toggle("on",b===el);});document.getElementById("sum_mine_wrap").style.display=(v==="mine")?"":"none";document.getElementById("sum_team_wrap").style.display=(v==="team")?"":"none";var dw=document.getElementById("sum_dash_wrap");if(dw)dw.style.display=(v==="dash")?"":"none";var ow=document.getElementById("sum_overview_wrap");if(ow)ow.style.display=(v==="overview")?"":"none";if(v==="mine")renderMySummary();else if(v==="dash")dashInit();else if(v==="overview")renderOverview();else{renderHodSummary();renderSummary();}}
+function sumView(v,el){document.querySelectorAll("#sum_view_seg .seg-btn").forEach(function(b){b.classList.toggle("on",b===el);});
+  // Only two sections now: Dashboard (overview) + HOD Approvals. Legacy wraps stay hidden.
+  var hide=function(id){var x=document.getElementById(id);if(x)x.style.display="none";};
+  hide("sum_mine_wrap");hide("sum_team_wrap");hide("sum_dash_wrap");
+  var ow=document.getElementById("sum_overview_wrap");if(ow)ow.style.display=(v==="overview")?"":"none";
+  var aw=document.getElementById("sum_approvals_wrap");if(aw)aw.style.display=(v==="approvals")?"":"none";
+  if(v==="approvals")renderApprovals();else renderOverview();}
 function minePeriod(v,el){_minePeriod=v;document.querySelectorAll("#mine_period_seg .seg-btn").forEach(function(b){b.classList.toggle("on",b===el);});renderMySummary();}
 function isoOf(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());}
 function mineRange(){var ds=elv("mine_date")||todayISO();var d=new Date(ds+"T00:00:00");var from,to;if(_minePeriod==="day"){from=to=ds;}else if(_minePeriod==="week"){var dow=d.getDay();var diff=(dow===0?6:dow-1);var mon=new Date(d);mon.setDate(d.getDate()-diff);var sun=new Date(mon);sun.setDate(mon.getDate()+6);from=isoOf(mon);to=isoOf(sun);}else{var y=d.getFullYear(),mo=d.getMonth();from=isoOf(new Date(y,mo,1));to=isoOf(new Date(y,mo+1,0));}return {from:from,to:to};}
@@ -7313,6 +7336,15 @@ function ovAggregate(){
     var found=false;Object.keys(reports).forEach(function(k){if(found)return;var r=reports[k];if(r.code===p.code&&r.date===pd)found=true;});
     if(found)A.pjp_covered++;
   });
+  // POSM store counts (from POSM tab): "having POSM" = Store Audit posmStatus Installed;
+  // "need POSM" = Requirement entries answered Yes. Distinct stores in the current period.
+  var haveSet={},needSet={};
+  var saData=(typeof saLoad==="function")?saLoad():[];
+  var reqData=(typeof reqLoad==="function")?reqLoad():[];
+  saData.forEach(function(r){if(!r||!r.date||!ovMatchEmp(r)||!ovInRange(r.date,s,e))return;var sid=r.companyCode||r.clientId||r.storeName||"";if(sid&&String(r.posmStatus||"")==="Installed")haveSet[sid]=1;});
+  reqData.forEach(function(r){if(!r||!r.date||!ovMatchEmp(r)||!ovInRange(r.date,s,e))return;var sid=r.companyCode||r.clientId||r.storeName||"";if(sid&&String(r.requirement||"")==="Yes")needSet[sid]=1;});
+  A.posm_have=Object.keys(haveSet).length;
+  A.posm_need=Object.keys(needSet).length;
   return A;
 }
 
@@ -7405,7 +7437,15 @@ function ovRenderOrders(A){
     st("AVG ORDER",ordTot>0?"₹"+(A.nsv_m/ordTot).toFixed(2)+"L":"₹0","per store","#f5f3ff","#5b21b6")+
     '</div>';
   var disp=document.getElementById("ov_ord_disp");if(disp){var rows=[["📦 Placed",A.orders_m+A.dlv_m,"var(--navy)"],["✅ Delivered",A.dlv_m,"#065f46"],["⏳ Pending",A.orders_m,"#92400e"],["❌ Cancelled",A.cancel_m,"#991b1b"]];var h="<thead><tr><th>Status</th><th>Count</th><th>Share</th></tr></thead><tbody>";rows.forEach(function(r){h+='<tr><td style="color:'+r[2]+';font-weight:600">'+r[0]+'</td><td>'+r[1]+'</td><td>'+ovPct(r[1],ordTot)+'%</td></tr>';});h+='<tr class="total"><td>TOTAL</td><td>'+ordTot+'</td><td>100%</td></tr></tbody>';disp.innerHTML=h;}
-  var posmEl=document.getElementById("ov_posm");if(posmEl){posmEl.innerHTML=A.posm_m>0?'<div style="text-align:center;padding:10px"><div style="font-size:34px;font-weight:800;color:#7c3aed">'+A.posm_m+'</div><div style="font-size:11px;color:var(--body);font-weight:600;margin-top:4px">POSM ITEMS INSTALLED</div><div style="font-size:10px;color:var(--mute);margin-top:2px">MTD across all stores</div></div>':'<div class="empty" style="padding:18px"><div class="big">📌</div>No POSM entries yet.</div>';}
+  var posmEl=document.getElementById("ov_posm");if(posmEl){
+    var have=A.posm_have||0,need=A.posm_need||0;
+    if(have||need){
+      posmEl.innerHTML='<div class="ov-grid">'+
+        st("STORES WITH POSM",have,"POSM installed (Store Audit)","#f5f3ff","#5b21b6")+
+        st("STORES NEEDING POSM",need,"Requirement = Yes (salesman input)","#fff7ed","#9a3412")+
+        '</div>';
+    }else posmEl.innerHTML='<div class="empty" style="padding:18px"><div class="big">📌</div>No POSM entries yet.</div>';
+  }
   var mslTot=A.mslNsv+A.nonMslNsv;var mslPct=ovPct(A.mslNsv,mslTot),nmPct=100-mslPct;
   var mslEl=document.getElementById("ov_msl");if(mslEl){mslEl.innerHTML=mslTot>0?'<div class="msl-bar"><div class="l" style="width:'+mslPct+'%">MSL '+mslPct+'%</div><div class="r" style="width:'+nmPct+'%">'+nmPct+'%</div></div><div class="ov-grid"><div class="stat-block" style="background:#ecfdf5;border-color:#bfe3c6"><div class="l" style="color:#065f46">MSL</div><div class="n" style="color:#14532d">₹'+A.mslNsv.toFixed(2)+'L</div><div class="sub" style="color:#166534">'+Math.round(A.mslUnits)+' units</div></div><div class="stat-block" style="background:#fffbeb;border-color:#facc85"><div class="l" style="color:#78350f">NON-MSL</div><div class="n" style="color:#7c2d12">₹'+A.nonMslNsv.toFixed(2)+'L</div><div class="sub" style="color:#92400e">'+Math.round(A.nonMslUnits)+' units</div></div></div>':'<div class="empty" style="padding:18px"><div class="big">📊</div>No MSL/Non-MSL data yet.</div>';}
 }
@@ -7418,41 +7458,43 @@ function ovRenderBrand(A){
   var skus=Object.keys(A.bySKU).map(function(k){return[k,A.bySKU[k]];}).sort(function(a,b){return b[1].nsv-a[1].nsv;}).slice(0,10);
   var skuEl=document.getElementById("ov_sku");if(skuEl){if(!skus.length){skuEl.innerHTML="<thead><tr><th>SKU</th></tr></thead><tbody><tr><td>No data yet</td></tr></tbody>";}else{var h="<thead><tr><th>#</th><th>Product</th><th>Brand</th><th>Units</th><th>₹L</th></tr></thead><tbody>";skus.forEach(function(x,i){var nm=x[1].name;if(nm.length>36)nm=nm.slice(0,36)+"…";h+='<tr><td>'+(i+1)+'</td><td>'+escapeHtml(nm)+'</td><td>'+escapeHtml(x[1].brand)+'</td><td>'+Math.round(x[1].units)+'</td><td>₹'+x[1].nsv.toFixed(2)+'</td></tr>';});h+='</tbody>';skuEl.innerHTML=h;}}
 }
+// Bucket a Working-With string into self / team (ME Sales Team) / ba (BA Supervisor).
+function ovWwBucket(ww){var w=String(ww||"");if(/ME Sales Team/i.test(w))return "team";if(/BA Supervisor/i.test(w))return "ba";if(/Self Working/i.test(w))return "self";return "other";}
+// Per-employee SC/TC/PC/NSV counting ONLY the days whose plan Working-With = this role.
+function ovTeamData(role){
+  var reports=load();var orders=soLoad();var b=ovBounds();var s=b[0],e=b[1];
+  var dayBucket={},byEmp={};
+  var ens=function(ec,nm,zn){if(!byEmp[ec])byEmp[ec]={name:nm||"",zone:zn||"",sc:0,tc:0,pc:0,nsv:0,nso:0,posm:0,days:0};return byEmp[ec];};
+  Object.keys(reports).forEach(function(k){var r=reports[k];if(!r||!r.date||!ovMatchEmp(r)||!ovInRange(r.date,s,e))return;
+    var bk=ovWwBucket(r.workingWith);dayBucket[(r.code||"")+"|"+r.date]=bk;
+    if(bk!==role)return;var o=ens(r.code||r.employee||"UNK",r.employee,r.zone);
+    o.sc+=num(r.sc||0);o.tc+=num(r.tc||0);o.pc+=num(r.pc||0);o.nso+=num(r.nso||0);o.posm+=num(r.posm||0);o.days++;
+  });
+  orders.forEach(function(x){if(!x||!x.date||!ovMatchEmp(x)||!ovInRange(x.date,s,e))return;
+    if(/cancel|no.?order/i.test((x.status||"").toString()))return;
+    if(dayBucket[(x.code||"")+"|"+x.date]!==role)return;
+    ens(x.code||"UNK",x.emp,"").nsv+=num(x.totNsv||0);
+  });
+  return byEmp;
+}
 function ovRenderTeam(){
-  var A=ovAggregate();
-  var m=loadMaster();var empList=(m&&m.employees&&m.employees.length)?m.employees:EMPLOYEES;
-  var scTgt=ovCfgNum("SC_Call_Target",7);
+  var role=OV_STATE.role;var scTgt=ovCfgNum("SC_Call_Target",7);
   var noteEl=document.getElementById("ov_team_note");var body=document.getElementById("ov_team_body");if(!body)return;
-  if(OV_STATE.role==="ba"){
-    if(noteEl)noteEl.textContent="BA Supervisor data awaited";
-    body.innerHTML='<div class="info-banner"><strong>📌 BA Supervisor data not yet uploaded.</strong><br>Employee master me abhi sirf <strong>SBDE</strong> role hai. Jab BA Supervisor field masters me add ho jaye (aur is app me upload), yahan turant Self · Sales Team · BA Supervisor teenon ka comparison aa jayega.</div><div class="empty" style="padding:20px"><div class="big">🎓</div>Awaiting BA Supervisor master data<br><span class="hint">Structure ready — data upload → auto-populate</span></div>';
-    return;
-  }
-  var target=empList;
-  if(OV_STATE.role==="self"){
-    if(OV_STATE.emp==="ALL"){
-      if(noteEl)noteEl.textContent="Select an employee above";
-      body.innerHTML='<div class="info-banner"><strong>👤 Self view</strong> — top wale <strong>Employee dropdown</strong> se apna naam select karein. Uske baad yahan sirf aapke SC/TC/PC/NSV metrics dikhenge.</div>';
-      return;
-    }
-    target=empList.filter(function(e){return (e.code||e.name)===OV_STATE.emp;});
-    if(noteEl)noteEl.textContent="Individual · "+(target[0]?target[0].name:"—");
-  }else{if(noteEl)noteEl.textContent="All "+empList.length+" employees";}
-  var zones={};target.forEach(function(e){if(!zones[e.zone||"-"])zones[e.zone||"-"]=[];zones[e.zone||"-"].push(e);});
-  var h='<div class="tbl-scroll"><table><thead><tr><th>Employee</th><th>SC</th><th>TC</th><th>Call%</th><th>PC</th><th>Prod%</th><th>MTD ₹L</th><th>NSO</th><th>POSM</th></tr></thead><tbody>';
-  var tSC=0,tTC=0,tPC=0,tNSV=0,tNSO=0,tPOSM=0;
-  Object.keys(zones).sort().forEach(function(z){
-    h+='<tr class="zonehdr"><td colspan="9">'+escapeHtml(z)+'</td></tr>';
-    zones[z].forEach(function(e){
-      var key=e.code||e.name;var s=A.byEmp[key]||{sc:0,tc:0,pc:0,nsv:0,nso:0,posm:0};
-      var cp=s.sc>0?Math.round(s.tc/s.sc*100):0;var pp=s.tc>0?Math.round(s.pc/s.tc*100):0;
-      h+='<tr><td>'+escapeHtml(shortName(e.name))+'</td><td>'+s.sc+'</td><td>'+s.tc+'</td><td><span class="p '+pctClass(cp)+'">'+cp+'%</span></td><td>'+s.pc+'</td><td><span class="p '+pctClass(pp)+'">'+pp+'%</span></td><td>₹'+s.nsv.toFixed(2)+'</td><td>'+s.nso+'</td><td>'+s.posm+'</td></tr>';
-      tSC+=s.sc;tTC+=s.tc;tPC+=s.pc;tNSV+=s.nsv;tNSO+=s.nso;tPOSM+=s.posm;
-    });
+  var lbl={self:"Self Working",team:"With ME Sales Team",ba:"With BA Supervisor"}[role]||role;
+  if(noteEl)noteEl.textContent=lbl+" days"+(OV_STATE.emp!=="ALL"?" · selected employee":"");
+  var byEmp=ovTeamData(role);
+  var keys=Object.keys(byEmp);
+  if(!keys.length){body.innerHTML='<div class="info-banner"><strong>'+escapeHtml(lbl)+'</strong> — is period me koi din PJP "'+escapeHtml(lbl)+'" ke saath plan nahi hua (ya EOD save nahi hua). Plan tab me Working-With set karo → yahan SC/TC/PC/NSV aa jayega.</div>';return;}
+  var h='<div class="tbl-scroll"><table><thead><tr><th>Employee</th><th>Days</th><th>SC</th><th>TC</th><th>Call%</th><th>PC</th><th>Prod%</th><th>NSV ₹L</th><th>NSO</th><th>POSM</th></tr></thead><tbody>';
+  var tSC=0,tTC=0,tPC=0,tNSV=0,tNSO=0,tPOSM=0,tD=0;
+  keys.map(function(k){return byEmp[k];}).sort(function(a,b){return b.nsv-a.nsv;}).forEach(function(s){
+    var cp=s.sc>0?Math.round(s.tc/s.sc*100):0;var pp=s.tc>0?Math.round(s.pc/s.tc*100):0;
+    h+='<tr><td>'+escapeHtml(shortName(s.name||"—"))+'</td><td>'+s.days+'</td><td>'+s.sc+'</td><td>'+s.tc+'</td><td><span class="p '+pctClass(cp)+'">'+cp+'%</span></td><td>'+s.pc+'</td><td><span class="p '+pctClass(pp)+'">'+pp+'%</span></td><td>₹'+s.nsv.toFixed(2)+'</td><td>'+s.nso+'</td><td>'+s.posm+'</td></tr>';
+    tSC+=s.sc;tTC+=s.tc;tPC+=s.pc;tNSV+=s.nsv;tNSO+=s.nso;tPOSM+=s.posm;tD+=s.days;
   });
   var tcp=tSC>0?Math.round(tTC/tSC*100):0;var tpp=tTC>0?Math.round(tPC/tTC*100):0;
-  h+='<tr class="total"><td>TOTAL</td><td>'+tSC+'</td><td>'+tTC+'</td><td>'+tcp+'%</td><td>'+tPC+'</td><td>'+tpp+'%</td><td>₹'+tNSV.toFixed(2)+'</td><td>'+tNSO+'</td><td>'+tPOSM+'</td></tr></tbody></table></div>';
-  h+='<div style="font-size:10px;color:var(--mute);padding:8px 4px 0">MTD · SC target '+scTgt+'/day · NSO target '+ovCfgNum("NSO_Monthly_Target",15)+'/month</div>';
+  h+='<tr class="total"><td>TOTAL</td><td>'+tD+'</td><td>'+tSC+'</td><td>'+tTC+'</td><td>'+tcp+'%</td><td>'+tPC+'</td><td>'+tpp+'%</td><td>₹'+tNSV.toFixed(2)+'</td><td>'+tNSO+'</td><td>'+tPOSM+'</td></tr></tbody></table></div>';
+  h+='<div style="font-size:10px;color:var(--mute);padding:8px 4px 0">Sirf <b>'+escapeHtml(lbl)+'</b> wale din · SC=target · TC=visited · PC=with-order · NSV=order value</div>';
   body.innerHTML=h;
 }
 function renderOverview(){
@@ -7463,6 +7505,132 @@ function renderOverview(){
   ovRenderKPI(A);ovRenderCharts(A);ovRenderCalls(A);ovRenderOrders(A);ovRenderBrand(A);ovRenderTeam();
 }
 /* ═══════════════ end OVERVIEW MODULE ═══════════════ */
+
+/* ═══════════════ HOD APPROVALS MODULE (Summary 2nd tab) ═══════════════ */
+/* NOTE: approval state is currently LOCAL (localStorage). For the HOD to see a rep's
+   submission on a different device — and for the rep to get the decision back — this
+   needs a synced backend sheet (pending decision). Same-device / admin works now. */
+var DEV_KEY="me_em_deviations_v1";
+function devLoad(){try{return JSON.parse(localStorage.getItem(DEV_KEY)||"[]");}catch(e){return [];}}
+function devSaveAll(a){try{localStorage.setItem(DEV_KEY,JSON.stringify(a));}catch(e){}}
+// Record a plan deviation (planned Working-With ≠ actual) so it shows in HOD Approvals.
+function recordPlanDeviation(r){
+  if(!r||!r.code||!r.date)return;
+  var planned=(typeof pjpWwForDate==="function")?(pjpWwForDate(r.code,r.date)||"Self Working"):"";
+  var actualRaw=String(r.workingWith||"");var actualBase=actualRaw.split(" — ")[0].split(" · ")[0].trim();
+  if(!planned||!actualBase||actualBase===planned)return;
+  var arr=devLoad();var id=r.code+"__"+r.date;var ex=null;for(var i=0;i<arr.length;i++){if(arr[i].id===id){ex=arr[i];break;}}
+  var status=fullAccess()?"Auto-approved (admin)":(r.approval==="Approved"?"Approved":"Pending");
+  var now=Date.now();var rec;
+  if(ex){ex.plannedWw=planned;ex.actualWw=actualRaw;ex.status=status;ex.ts=nowTime();ex.updatedAt=now;rec=ex;}
+  else{rec={id:id,code:r.code,emp:r.employee||"",date:r.date,plannedWw:planned,actualWw:actualRaw,reason:(r.offpjp?"Off-PJP / plan changed":"Working-With changed"),status:status,hodRemarks:"",ts:nowTime(),updatedAt:now};arr.push(rec);}
+  devSaveAll(arr);
+  try{if(window.__sync&&window.__sync.pushDeviation)window.__sync.pushDeviation(rec);}catch(e){}
+}
+function apprIsHod(){try{return fullAccess()||getRole()==="admin";}catch(e){return false;}}
+function apprMyCode(){try{var r=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};return r.on?r.code:"";}catch(e){return "";}}
+// Pending items = submitted PJPs awaiting HOD + pending deviations (scoped to the viewer).
+function apprPjpPending(){var all=pjpLoad();var mine=apprMyCode();return Object.keys(all).map(function(k){return {key:k,dr:all[k]};}).filter(function(o){var dr=o.dr;if(!dr)return false;if(mine&&String(dr.code).toUpperCase()!==String(mine).toUpperCase())return false;return dr.status==="Pending"||dr.sentToHod;});}
+function apprDevPending(){var mine=apprMyCode();return devLoad().filter(function(d){if(mine&&String(d.code).toUpperCase()!==String(mine).toUpperCase())return false;return d.status==="Pending";});}
+function apprPendingCount(){return apprPjpPending().length+apprDevPending().length;}
+function updateApprBadge(){var b=document.getElementById("sum_appr_badge");if(!b)return;var n=apprIsHod()?apprPendingCount():apprMyOpenCount();if(n>0){b.textContent=n;b.style.display="";}else b.style.display="none";}
+function apprMyOpenCount(){var mine=apprMyCode();if(!mine)return 0;var all=pjpLoad();var n=0;Object.keys(all).forEach(function(k){var dr=all[k];if(dr&&String(dr.code).toUpperCase()===String(mine).toUpperCase()&&dr.status==="Rejected")n++;});devLoad().forEach(function(d){if(String(d.code).toUpperCase()===String(mine).toUpperCase()&&d.status==="Rejected")n++;});return n;}
+
+function pjpFieldDays(dr){var out=[];if(!dr||!dr.days)return out;Object.keys(dr.days).sort().forEach(function(dt){var ww=dr.days[dt].ww||"";if(/Self Working|ME Sales Team|BA Supervisor/i.test(ww))out.push(dt);});return out;}
+var _apprRejKey=null;
+function renderApprovals(){
+  var box=document.getElementById("sum_approvals_wrap");if(!box)return;
+  var hod=apprIsHod();
+  var h='';
+  h+='<div class="card" style="border-left:4px solid #7c3aed"><div class="note" style="margin:0">'+(hod?'👔 <b>HOD / Admin</b> — neeche PJP submissions aur plan deviations approve/reject karo.':'🧑‍💼 Aapke PJP aur plan-change approvals ka status yahan dikhega.')+'</div></div>';
+  if(hod)h+=apprWindowCard();
+  // ── PJP submissions ──
+  var pjps=apprPjpPending();
+  var decided=[];var all=pjpLoad();var mine=apprMyCode();
+  Object.keys(all).forEach(function(k){var dr=all[k];if(!dr)return;if(mine&&String(dr.code).toUpperCase()!==String(mine).toUpperCase())return;if(dr.status==="HOD-Approved"||dr.status==="Rejected")decided.push({key:k,dr:dr});});
+  h+='<div class="card"><h2><span class="dot"></span>📅 Monthly PJP Approvals'+(pjps.length?' <span class="appr-badge">'+pjps.length+'</span>':'')+'</h2>';
+  if(!pjps.length)h+='<div class="note" style="margin:0">Koi PJP approval pending nahi.</div>';
+  pjps.forEach(function(o){h+=apprPjpCard(o.key,o.dr,hod);});
+  if(decided.length){h+='<div class="hint" style="margin:12px 0 6px">Recent decisions</div>';decided.slice(-6).reverse().forEach(function(o){var dr=o.dr;var ok=dr.status==="HOD-Approved";h+='<div style="border:1px solid #e3ece5;border-radius:9px;padding:8px 10px;margin-bottom:6px;font-size:12.5px"><b>'+escapeHtml(apprEmpName(dr.code))+'</b> · '+escapeHtml(monthName(dr.month))+' — <span style="color:'+(ok?"#166534":"#b4432f")+';font-weight:700">'+(ok?"✅ Approved":"✖ Rejected")+'</span>'+(dr.rejectedDays&&dr.rejectedDays.length?' <span class="hint">('+dr.rejectedDays.length+' days to fix)</span>':'')+(dr.rejectReason?('<div class="hint">'+escapeHtml(dr.rejectReason)+'</div>'):'')+'</div>';});}
+  h+='</div>';
+  // ── Plan deviations ──
+  var devsP=apprDevPending();var devsAll=devLoad().filter(function(d){return !mine||String(d.code).toUpperCase()===String(mine).toUpperCase();});
+  h+='<div class="card"><h2><span class="dot"></span>🔀 Plan Deviations'+(devsP.length?' <span class="appr-badge">'+devsP.length+'</span>':'')+'</h2>';
+  if(!devsAll.length)h+='<div class="note" style="margin:0">Koi plan deviation nahi. <span class="hint">(PJP ke against plan badla to yahan aayega.)</span></div>';
+  devsAll.slice().reverse().slice(0,20).forEach(function(d){h+=apprDevCard(d,hod);});
+  h+='</div>';
+  box.innerHTML=h;
+  updateApprBadge();
+}
+function apprEmpName(code){var e=(typeof empByCodeM==="function")?empByCodeM(code):null;return e?e.name:(code||"—");}
+function apprWindowCard(){
+  var m=loadMaster();var list=(m&&m.employees)?m.employees:[];
+  var nm=(typeof nextMonthStr==="function")?nextMonthStr():"";
+  var opts='<option value="">Employee…</option>'+list.map(function(e){return '<option value="'+escAttr(e.code||"")+'">'+escapeHtml((e.name||"")+" ("+(e.code||"")+")")+'</option>';}).join("");
+  var h='<div class="card" style="border-left:4px solid #0E4F3B"><h2><span class="dot"></span>🔓 Open PJP Window (late submission)</h2>';
+  h+='<div class="note" style="margin:0 0 8px">Window normally <b>27th → 1st</b> hoti hai. Late salesman ke liye yahan se manually khol do.</div>';
+  h+='<select id="appr_win_emp">'+opts+'</select>';
+  h+='<div class="row2" style="margin-top:8px"><div><label class="hint" style="margin-top:0">Month</label><input type="month" id="appr_win_month" value="'+escAttr(nm)+'"></div><div><label class="hint" style="margin-top:0">Open until</label><input type="date" id="appr_win_until"></div></div>';
+  h+='<button class="btn btn-navy" style="margin-top:8px" onclick="apprDoOpenWindow()">🔓 Open window for this salesman</button></div>';
+  return h;
+}
+function apprDoOpenWindow(){
+  var code=elv("appr_win_emp"),month=elv("appr_win_month"),until=elv("appr_win_until");
+  if(!code||!month){toast("Employee + month select karo");return;}
+  if(!until){var y=+month.slice(0,4),mo=+month.slice(5,7);var last=new Date(y,mo,0);until=y+"-"+pad2(mo)+"-"+pad2(last.getDate());}
+  var all=pjpLoad();var key=code+"__"+month;var dr=all[key]||{code:code,month:month,days:{},status:"Draft"};
+  dr.windowOpenUntil=until;dr.updatedAt=Date.now();all[key]=dr;pjpSaveAll(all);
+  apprPushDraft(key);
+  toast("🔓 Window open for "+apprEmpName(code)+" — "+until+" tak");renderApprovals();
+}
+function apprPjpCard(key,dr,hod){
+  var nm=apprEmpName(dr.code);var mn=monthName(dr.month);
+  var h='<div style="border:1px solid #e3ece5;border-radius:10px;padding:10px;margin-bottom:9px">';
+  h+='<div style="font-weight:700;font-size:13px">'+escapeHtml(nm)+' <span class="hint">· '+escapeHtml(mn)+'</span></div>';
+  h+='<div class="note" style="margin:3px 0 8px">'+pjpFieldDays(dr).length+' field days planned · submitted '+escapeHtml(dr.submittedAt||"-")+'</div>';
+  if(hod){
+    if(_apprRejKey===key){
+      var days=pjpFieldDays(dr);
+      h+='<div style="border-top:1px dashed #cfe0d5;padding-top:8px"><div class="hint" style="margin-bottom:6px">Jin dino ko change karwana hai unhe tick karo:</div>';
+      h+='<div style="max-height:180px;overflow:auto;border:1px solid #eef2ef;border-radius:8px;padding:6px">';
+      days.forEach(function(dt){h+='<label style="display:flex;gap:8px;align-items:center;font-size:12px;padding:2px 0"><input type="checkbox" class="appr-rejday" value="'+dt+'"> '+ddmmyy(dt)+' — '+escapeHtml((dr.days[dt].ww||"")+(dr.days[dt].city?(" / "+dr.days[dt].city):""))+'</label>';});
+      h+='</div><input type="text" id="appr_rej_reason" placeholder="Reason (kya change karna hai)" style="margin-top:8px"><div class="row2" style="margin-top:8px"><button class="btn btn-ghost small" onclick="apprRejCancel()">Cancel</button><button class="btn small" style="background:#b4432f;color:#fff" onclick="apprSubmitDayReject(\''+key+'\')">✖ Reject selected days</button></div></div>';
+    }else{
+      h+='<div class="row2"><button class="btn btn-navy small" onclick="apprApprovePjp(\''+key+'\')">✅ Approve month</button><button class="btn small" style="background:#fdece9;color:#b4432f;border:1px solid #f0c4bc" onclick="apprRejOpen(\''+key+'\')">✖ Reject specific days</button></div>';
+      h+='<button class="btn btn-ghost small" style="margin-top:6px" onclick="apprRejectWhole(\''+key+'\')">🚫 Reject WHOLE month</button>';
+    }
+  }else{
+    var stTxt=dr.status==="Pending"?'⏳ Pending HOD approval':(dr.status==="Rejected"?'✖ Rejected — dobara bharo':(dr.status==="HOD-Approved"?'✅ Approved':dr.status));
+    h+='<div class="note" style="margin:0;font-weight:600">'+stTxt+'</div>';
+    if(dr.rejectedDays&&dr.rejectedDays.length)h+='<div class="hint">Change these days: '+dr.rejectedDays.map(function(d){return ddmmyy(d);}).join(", ")+'</div>';
+  }
+  h+='</div>';return h;
+}
+function apprDevCard(d,hod){
+  var col=d.status==="Pending"?"#92400e":(d.status==="Rejected"?"#b4432f":"#166534");
+  var h='<div style="border:1px solid #e3ece5;border-radius:10px;padding:9px 10px;margin-bottom:8px">';
+  h+='<div style="font-weight:700;font-size:12.5px">'+escapeHtml(d.emp||apprEmpName(d.code))+' <span class="hint">· '+ddmmyy(d.date)+'</span></div>';
+  h+='<div class="note" style="margin:3px 0">Planned: <b>'+escapeHtml(d.plannedWw)+'</b> → Actual: <b>'+escapeHtml(d.actualWw)+'</b></div>';
+  h+='<div style="font-size:11.5px;color:'+col+';font-weight:700">'+escapeHtml(d.status)+(d.hodRemarks?(' · '+escapeHtml(d.hodRemarks)):'')+'</div>';
+  if(hod&&d.status==="Pending")h+='<div class="row2" style="margin-top:6px"><button class="btn btn-navy small" onclick="apprApproveDev(\''+d.id+'\')">✅ Approve</button><button class="btn small" style="background:#fdece9;color:#b4432f;border:1px solid #f0c4bc" onclick="apprRejectDev(\''+d.id+'\')">✖ Reject</button></div>';
+  h+='</div>';return h;
+}
+function apprPushDraft(key){try{var a=pjpLoad();if(a[key]&&window.__sync&&window.__sync.pushPjpDraft)window.__sync.pushPjpDraft(a[key]);}catch(e){}}
+function apprPushDev(d){try{if(d&&window.__sync&&window.__sync.pushDeviation)window.__sync.pushDeviation(d);}catch(e){}}
+function apprApprovePjp(key){if(!confirm("Poore month ka PJP approve karein?"))return;if(typeof pjpHodApproved==="function")pjpHodApproved(key);else{var a0=pjpLoad();if(a0[key]){a0[key].status="HOD-Approved";a0[key].hodAt=nowTime();pjpSaveAll(a0);}}var a=pjpLoad();if(a[key]){a[key].updatedAt=Date.now();a[key].rejectedDays=[];pjpSaveAll(a);}apprPushDraft(key);toast("✅ PJP approved");renderApprovals();}
+function apprRejectWhole(key){var why=prompt("Reject reason (poora month):");if(why==null)return;var a=pjpLoad();if(a[key]){a[key].status="Rejected";a[key].rejectReason="HOD: "+why;a[key].rejectedDays=[];a[key].updatedAt=Date.now();pjpSaveAll(a);}apprPushDraft(key);toast("Poora month reject — rep dobara bharega");renderApprovals();}
+function apprRejOpen(key){_apprRejKey=key;renderApprovals();}
+function apprRejCancel(){_apprRejKey=null;renderApprovals();}
+function apprSubmitDayReject(key){
+  var days=[];document.querySelectorAll(".appr-rejday:checked").forEach(function(c){days.push(c.value);});
+  if(!days.length){toast("Kam se kam ek din select karo");return;}
+  var why=(document.getElementById("appr_rej_reason")||{}).value||"";
+  var a=pjpLoad();if(a[key]){a[key].status="Rejected";a[key].rejectedDays=days;a[key].rejectReason="HOD: "+(why||"in dino ko change karo");a[key].updatedAt=Date.now();pjpSaveAll(a);}
+  apprPushDraft(key);_apprRejKey=null;toast("✖ Selected days rejected — rep ko notify");renderApprovals();
+}
+function apprApproveDev(id){var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Approved";a[i].hodRemarks="HOD approved";a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);toast("✅ Deviation approved");renderApprovals();}
+function apprRejectDev(id){var why=prompt("Reject reason:");if(why==null)return;var a=devLoad();var hit=null;for(var i=0;i<a.length;i++)if(a[i].id===id){a[i].status="Rejected";a[i].hodRemarks="HOD: "+why;a[i].updatedAt=Date.now();hit=a[i];}devSaveAll(a);apprPushDev(hit);toast("✖ Deviation rejected");renderApprovals();}
+/* ═══════════════ end HOD APPROVALS MODULE ═══════════════ */
 
 /* ═══════════════ PENDING ORDERS MODULE ═══════════════ */
 // Order is "closed" if status is one of: Billing Done, No Order, Cancel Order
@@ -10272,6 +10440,41 @@ function tadaFillClaimDesigDropdown(){
     mergeKey("me_em_newstores_v1",remote.NewStores,"StoreId",function(r){return r.storeId||r.id;},function(r){return {id:r.StoreId,storeId:r.StoreId,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),dbCode:r.DbCode,dbName:r.DbName,type:r.StoreType,storeName:r.StoreName,state:r.State,town:r.Town,address:r.Address,pincode:r.Pincode,beat:r.Beat,category:r.Category,daySales:r.DaySales,monthlyTurnover:r.MonthlyTurnover,owner:r.OwnerName,ownerMob:r.OwnerMobile,reason:r.Reason,status:r.Status||"In-Process",statusReason:r.StatusReason||"",ts:r.Ts};});
   }
 
+  // ─── Approvals PUSH (one PJP draft / one deviation) ─────────────────────────
+  function pushPjpDraftRow(dr){
+    if(!dr||!dr.code||!dr.month)return Promise.resolve({ok:false});
+    var e=(typeof empByCodeM==="function")?empByCodeM(dr.code):null;
+    return pushRows("PJP_Drafts",[{Key:dr.code+"__"+dr.month,EmpCode:dr.code,EmpName:(e?e.name:""),Month:dr.month,Status:dr.status||"",SubmittedAt:dr.submittedAt||"",HodAt:dr.hodAt||"",RejectReason:dr.rejectReason||"",RejectedDaysJson:JSON.stringify(dr.rejectedDays||[]),DaysJson:JSON.stringify(dr.days||{}),WindowOpenUntil:dr.windowOpenUntil||"",UpdatedAt:dr.updatedAt||Date.now()}],"Key");
+  }
+  function pushDeviationRow(d){
+    if(!d||!d.id)return Promise.resolve({ok:false});
+    return pushRows("Deviations",[{Id:d.id,EmpCode:d.code,EmpName:d.emp||"",Date:fmtDDMMYYYY(d.date),PlannedWw:d.plannedWw||"",ActualWw:d.actualWw||"",Reason:d.reason||"",Status:d.status||"",HodRemarks:d.hodRemarks||"",UpdatedAt:d.updatedAt||Date.now()}],"Id");
+  }
+  // ─── Approvals MERGE-DOWN (newest UpdatedAt wins — HOD decisions must reach the rep) ──
+  function mergeApprovalsFromRemote(remote){
+    if(remote.PJP_Drafts&&remote.PJP_Drafts.length&&typeof pjpLoad==="function"){
+      var all=pjpLoad();var changed=false;
+      remote.PJP_Drafts.forEach(function(r){
+        var key=r.Key||((r.EmpCode||"")+"__"+(r.Month||""));if(!key||key==="__")return;
+        var loc=all[key];var rUpd=+r.UpdatedAt||0;var lUpd=(loc&&+loc.updatedAt)||0;
+        if(loc&&lUpd>=rUpd)return;
+        var days={},rej=[];try{days=JSON.parse(r.DaysJson||"{}");}catch(e){}try{rej=JSON.parse(r.RejectedDaysJson||"[]");}catch(e){}
+        all[key]={code:r.EmpCode,month:r.Month,status:r.Status||"",submittedAt:r.SubmittedAt||"",hodAt:r.HodAt||"",rejectReason:r.RejectReason||"",rejectedDays:rej,days:days,windowOpenUntil:r.WindowOpenUntil||"",updatedAt:rUpd,sentToHod:(r.Status==="Pending"),wasApproved:(r.Status==="HOD-Approved")};
+        changed=true;
+      });
+      if(changed)try{pjpSaveAll(all);}catch(e){}
+    }
+    if(remote.Deviations&&remote.Deviations.length&&typeof devLoad==="function"){
+      var arr=devLoad();var byId={};arr.forEach(function(d){byId[d.id]=d;});var ch=false;
+      remote.Deviations.forEach(function(r){
+        var rUpd=+r.UpdatedAt||0;var loc=byId[r.Id];var lUpd=(loc&&+loc.updatedAt)||0;if(loc&&lUpd>=rUpd)return;
+        var rec={id:r.Id,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),plannedWw:r.PlannedWw,actualWw:r.ActualWw,reason:r.Reason,status:r.Status,hodRemarks:r.HodRemarks||"",updatedAt:rUpd};
+        if(loc){Object.keys(rec).forEach(function(k){loc[k]=rec[k];});}else{arr.push(rec);byId[r.Id]=rec;}ch=true;
+      });
+      if(ch)try{devSaveAll(arr);}catch(e){}
+    }
+  }
+
   // ─── Core: pull ─────────────────────────────────────────────
   function pullAll(){
     var email=currentUserEmail();
@@ -10285,6 +10488,9 @@ function tadaFillClaimDesigDropdown(){
       mergeMasterFromRemote(res);
       // Apply transactional data (SecOrders / POSM / NewStores) — cross-device visibility
       try{mergeTxnFromRemote(res);}catch(e){}
+      // Apply approvals (PJP drafts + deviations) — rep↔HOD cross-device
+      try{mergeApprovalsFromRemote(res);}catch(e){}
+      try{if(typeof updateApprBadge==="function")updateApprBadge();var aw=document.getElementById("sum_approvals_wrap");if(aw&&aw.style.display!=="none"&&typeof renderApprovals==="function")renderApprovals();}catch(e){}
       // Store role/code for filters
       try{
         localStorage.setItem("me_em_sync_role",res.role||"Employee");
@@ -10765,6 +10971,8 @@ function tadaFillClaimDesigDropdown(){
     pullNow:pullAll,
     push:pushRows,
     pushTxnNow:pushTxnNow,
+    pushPjpDraft:pushPjpDraftRow,
+    pushDeviation:pushDeviationRow,
     pushLoginUser:pushLoginUser,
     replaceSheet:replaceSheetRemote,
     drain:drainQueue,
