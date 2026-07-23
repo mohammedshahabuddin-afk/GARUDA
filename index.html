@@ -1566,6 +1566,17 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <h2 style="color:#0369a1"><span class="dot" style="background:#0369a1"></span>🚗 TA/DA Claim — Travel &amp; Daily Allowance</h2>
       <div class="note" style="margin:0 0 10px">Employee: apni field visits ka claim submit karo. Rate calc apni designation ke hisaab se automatic hoga. Admin: rate config <b>Data</b> tab me set karo.</div>
 
+      <!-- 📅 Monthly TA/DA from PJP (auto-projected once PJP is submitted; each day editable) -->
+      <div style="border:1px solid #bfdbfe;border-radius:8px;padding:12px;background:#eff6ff;margin-bottom:10px">
+        <div style="font-weight:800;font-size:12.5px;color:#0369a1;margin-bottom:4px">📅 Monthly TA/DA (from PJP)</div>
+        <div class="note" style="margin:0 0 8px">PJP <b>submit</b> hone ke baad poore month ka TA/DA yahan apne aap aa jayega — har din ka Station (HQ / Ex-HQ / Outstation) &amp; distance auto nikaal ke. Har din ka amount <b>editable</b> hai (apne actuals daal sakte ho).</div>
+        <div class="row2">
+          <div><label class="hint" style="margin-top:0">Month</label><input type="month" id="tada_pjp_month" onchange="tadaPjpRender()"></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-ghost small" style="width:auto;margin:0" onclick="tadaPjpRender()">🔄 Refresh from PJP</button></div>
+        </div>
+        <div id="tada_pjp_out" style="margin-top:10px"></div>
+      </div>
+
       <!-- Add New Claim -->
       <div style="border:1px solid #dbeafe;border-radius:8px;padding:12px;background:#f5f9fd;margin-bottom:10px">
         <div style="font-weight:800;font-size:12.5px;color:#0369a1;margin-bottom:6px">➕ New TA/DA Claim</div>
@@ -3439,7 +3450,8 @@ function pjpSubmit(){
   try{if(window.__sync&&window.__sync.pushPjpDraft)window.__sync.pushPjpDraft(dr);}catch(e){}
   try{renderPjpList();}catch(e){}try{if(typeof renderCoverage==="function")renderCoverage();}catch(e){}try{if(typeof pjpNotify==="function")pjpNotify();}catch(e){}try{updateApprBadge();}catch(e){}
   var h='<div class="card" style="margin-top:13px;border-left:4px solid #C8A24B"><h2 style="color:#8a6a00"><span class="dot" style="background:#C8A24B"></span>\u23f3 Submitted for HOD Approval</h2>';
-  h+='<div class="note" style="margin:0">PJP HOD ko approval ke liye chala gaya \u2014 dekhne ke liye <b>Summary \u2192 HOD Approvals</b>. Approve hote hi master update + Plan chalega. Reject hua to yahan dobara edit karke submit karein.</div></div>';
+  h+='<div class="note" style="margin:0">PJP HOD ko approval ke liye chala gaya \u2014 dekhne ke liye <b>Summary \u2192 HOD Approvals</b>. Approve hote hi master update + Plan chalega. Reject hua to yahan dobara edit karke submit karein.</div>';
+  h+='<div class="note" style="margin:8px 0 0;background:#eff6ff;border-left:3px solid #0369a1;padding:7px 10px;border-radius:6px">\ud83d\ude97 Aapka poore month ka <b>TA/DA</b> ab <b>TA/DA tab</b> me ready hai (Station + distance ke hisaab se auto) \u2014 waha jaake amount check/edit kar sakte ho.</div></div>';
   var _po=document.getElementById("pjp_out");if(_po){_po.innerHTML=h;if(_po.scrollIntoView)_po.scrollIntoView({behavior:"smooth",block:"start"});}
 }
 var PJP_FOCUS_ODD="TDC - Combo & Facewash";
@@ -3973,13 +3985,12 @@ function renderPjpList(){
     else if(off){h+='<div class="note" style="margin:5px 0 0;color:#8a3520;font-weight:600">'+escapeHtml(off)+'</div>';}
     else{
       h+='<div class="hint" style="margin-top:3px">\uD83C\uDFAF '+escapeHtml(pjpFocusForWeek(wk))+'</div>';
-      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div>'+pjpTadaBlockHtml(dr,dt,true);}
-      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpDayCityChanged(\''+dt+'\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div>'+pjpTadaBlockHtml(dr,dt,false);}
+      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div><div style="margin-top:5px">'+pjpStationBadgeHtml(dt,row.city||"")+'</div>';}
+      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpUpdateStationBadge(\''+dt+'\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div><div style="margin-top:5px">'+pjpStationBadgeHtml(dt,row.city||"")+'</div>';}
     }
     h+='</div>';
   });
-  var bar='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#0f2942;color:#fff;border-radius:9px;padding:9px 12px;margin-bottom:9px"><span style="font-weight:700;font-size:12px">💰 Projected Monthly TA/DA</span><span style="font-weight:800;font-size:15px" id="pjp_ta_total">₹0</span></div><div class="hint" style="margin:-4px 0 9px">Auto-projected from Station + distance (2-wheeler rate). Edit any day\'s ₹ or Confirm — cleared field reverts to auto.</div>';
-  box.innerHTML=bar+h;pjpUpdateCount();pjpUpdateMonthTa();
+  box.innerHTML=h;pjpUpdateCount();
 }
 function pjpSetCell(dt,field,val){var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={city:"",beat:""};dr.days[dt][field]=val;savePjpDraft(dr);renderCoverage();pjpUpdateCount();}
 function pjpSetOff(sel){var dt=sel.getAttribute("data-dt");var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.offDays)dr.offDays={};var v=sel.value;if(v)dr.offDays[dt]=v;else delete dr.offDays[dt];savePjpDraft(dr);renderPjpList();renderCoverage();}
@@ -4308,14 +4319,13 @@ function renderPjpList(){
     if(sun){}
     else if(field){
       h+='<div class="hint" style="margin-top:3px">\uD83C\uDFAF '+escapeHtml(pjpFocusForWeek(wk))+'</div>';
-      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div>'+pjpTadaBlockHtml(dr,dt,true);}
-      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpDayCityChanged(\''+dt+'\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div>'+pjpTadaBlockHtml(dr,dt,false);}
+      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div><div style="margin-top:5px">'+pjpStationBadgeHtml(dt,row.city||"")+'</div>';}
+      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpUpdateStationBadge(\''+dt+'\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div><div style="margin-top:5px">'+pjpStationBadgeHtml(dt,row.city||"")+'</div>';}
     }
     else{h+='<div class="note" style="margin:5px 0 0;color:#8a3520;font-weight:600">'+escapeHtml(ww)+'</div>';}
     h+='</div>';
   });
-  var bar='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#0f2942;color:#fff;border-radius:9px;padding:9px 12px;margin-bottom:9px"><span style="font-weight:700;font-size:12px">💰 Projected Monthly TA/DA</span><span style="font-weight:800;font-size:15px" id="pjp_ta_total">₹0</span></div><div class="hint" style="margin:-4px 0 9px">Auto-projected from Station + distance (2-wheeler rate). Edit any day\'s ₹ or Confirm — cleared field reverts to auto.</div>';
-  box.innerHTML=bar+h;pjpUpdateCount();pjpUpdateMonthTa();
+  box.innerHTML=h;pjpUpdateCount();
 }
 function buildPjpMsg(dr,emp,hod){var L=[];L.push("*Honasa Emerging Brand \u2014 PJP Approval*");L.push("Month: "+monthName(dr.month));L.push("Employee: "+emp);L.push("To: "+hod);L.push("");var days=dr.days||{};var keys=Object.keys(days).sort();keys.forEach(function(dt){var r=days[dt]||{};var ww=r.ww||"Self Working";if(pjpIsField(ww)){if((r.city||"").trim()&&(r.beat||"").trim())L.push(pjpDateDMY(dt)+" \u2014 "+ww+" \u2014 "+r.city+" / "+r.beat);}else{L.push(pjpDateDMY(dt)+" \u2014 "+ww);}});L.push("");L.push("Approve to update master.");return L.join("\n");}
 function pjpAoa(list){var m=loadMaster();var head=["Code","Employee Name","Employee HQ","Zone","Date","Week Days","Working With","Town/City","Beat/Market","Focus Brand","Status"];var aoa=[head];list.forEach(function(dr){var e=empByAny(m,dr.code,"","","code")||{};pjpEntriesFor(dr).forEach(function(r){aoa.push([r.code,e.name||"",e.hq||"",r.zone,pjpDateDMY(r.date),r.week,r.ww||"",r.town,r.beat,r.focus,r.status||dr.status||""]);});});return aoa;}
@@ -9053,13 +9063,16 @@ function tadaEmpResolve(source){
   var emp=(typeof empByAny==="function")?empByAny(m,elv("tada_emp_code"),elv("tada_emp_name"),elv("tada_emp_hq"),source):null;
   if(!emp)return;
   setv("tada_emp_code",emp.code);setv("tada_emp_name",emp.name);setv("tada_emp_hq",emp.hq);
-  // Auto-set designation if master has it (dynamic — any designation stored)
-  if(emp.designation||emp.role){
-    var d=(emp.designation||emp.role||"").toUpperCase();
+  // Auto-set designation from master. Employee objects use `desig` (from the "Designation"
+  // column); `designation`/`role` are fallbacks. (Was reading only emp.designation, which is
+  // always empty → designation never auto-filled.)
+  if(emp.desig||emp.designation||emp.role){
+    var d=(emp.desig||emp.designation||emp.role||"").toUpperCase();
     var validList=taRatesDesigList();
     if(validList.indexOf(d)>=0){setv("tada_claim_desig",d);}
   }
   tadaShowRates();tadaCalc();
+  try{tadaPjpRender();}catch(e){}
 }
 
 /* tadaShowRates — display current designation's rate on selection */
@@ -9337,6 +9350,94 @@ function tadaShareWA(){
   try{window.open(url,"_blank");}catch(e){toast("WhatsApp share failed");}
 }
 
+/* ═══════════ Monthly TA/DA derived from the submitted PJP (editable) ═══════════
+   Station (HQ / Ex-HQ / Outstation) is auto from the day's city vs the employee's HQ
+   (from master/sheet, haversine distance). Projection: HQ & Ex-HQ → Local DA; Outstation
+   → Outstation DA; Travel: Ex-HQ = 2×km (round trip), Outstation = 1×km, 2-wheeler rate.
+   Per-day edited amounts persist in me_em_tada_pjp_v1 (keyed code__month → {date:{amt}}). */
+function tadaPjpStore(){try{return JSON.parse(localStorage.getItem("me_em_tada_pjp_v1")||"{}");}catch(e){return {};}}
+function tadaPjpSaveStore(o){try{localStorage.setItem("me_em_tada_pjp_v1",JSON.stringify(o||{}));}catch(e){}}
+function tadaPjpEmpCode(){
+  var c=elv("tada_emp_code");if(c)return c;
+  try{var r=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};if(r.on&&r.code)return r.code;}catch(e){}
+  return "";
+}
+function tadaPjpSubmitted(dr){if(!dr)return false;return /pending|hod|approved|accepted|sent/i.test(String(dr.status||""))||!!dr.sentToHod;}
+function tadaPjpProject(code,month){
+  var all=(typeof pjpLoad==="function")?pjpLoad():{};var dr=all[code+"__"+month];
+  if(!dr)return {dr:null,rows:[]};
+  var e=(typeof empByAny==="function")?empByAny(loadMaster(),code,"","","code"):null;
+  var hq=(e&&e.hq)||"";
+  var desig=((e&&(e.desig||e.designation))||"").toUpperCase();
+  var list=(typeof taRatesDesigList==="function")?taRatesDesigList():["SBDE"];
+  if(list.indexOf(desig)<0)desig=list[0]||"SBDE";
+  var rates=(typeof taRatesLoad==="function")?taRatesLoad(desig):{perKm2w:4,localDA:200,outDA:500};
+  var dates=(typeof pjpDatesInMonth==="function")?pjpDatesInMonth(month):[];
+  var rows=[];
+  dates.forEach(function(dt){
+    var row=(dr.days&&dr.days[dt]);if(!row)return;
+    var ww=row.ww||"Self Working";if(!pjpIsField(ww))return;
+    var city=(row.city||"").trim();
+    var st=(window.__station&&window.__station.computeStationStatus)?window.__station.computeStationStatus(hq,city):{status:"Unknown",km:null};
+    var km=(st.km!=null)?Math.round(st.km):0;var travel=0,da=0;
+    if(st.status==="HQ"){da=rates.localDA;}
+    else if(st.status==="Ex-HQ"){travel=2*km*rates.perKm2w;da=rates.localDA;}
+    else if(st.status==="Outstation"){travel=1*km*rates.perKm2w;da=rates.outDA;}
+    var proj=(st.status==="Unknown")?null:(travel+da);
+    rows.push({date:dt,city:city,beat:row.beat||"",ww:ww,station:st.status,km:st.km,travel:travel,da:da,proj:proj});
+  });
+  return {dr:dr,hq:hq,desig:desig,rates:rates,rows:rows};
+}
+function tadaPjpAmount(code,month,dt,proj){
+  var store=tadaPjpStore();var d=store[code+"__"+month]&&store[code+"__"+month][dt];
+  if(d&&d.amt!=null&&d.amt!=="")return {amt:+d.amt,manual:true};
+  return {amt:(proj==null?null:Math.round(proj)),manual:false};
+}
+function tadaPjpSetAmount(code,month,dt,val){
+  var store=tadaPjpStore();var k=code+"__"+month;if(!store[k])store[k]={};
+  if(val===""||val==null)delete store[k][dt];else store[k][dt]={amt:Math.max(0,Math.round(+val||0))};
+  tadaPjpSaveStore(store);tadaPjpUpdateTotal(code,month);
+}
+function tadaPjpUpdateTotal(code,month){
+  var el=document.getElementById("tada_pjp_total");if(!el)return;
+  var p=tadaPjpProject(code,month);var t=0;
+  p.rows.forEach(function(r){var a=tadaPjpAmount(code,month,r.date,r.proj);if(a.amt!=null)t+=a.amt;});
+  el.textContent="₹"+Math.round(t).toLocaleString("en-IN");
+}
+function tadaPjpRender(){
+  var box=document.getElementById("tada_pjp_out");if(!box)return;
+  var code=tadaPjpEmpCode();var month=elv("tada_pjp_month");
+  if(code&&!month){var all0=(typeof pjpLoad==="function")?pjpLoad():{};var best="";Object.keys(all0).forEach(function(k){if(k.indexOf(code+"__")===0&&tadaPjpSubmitted(all0[k])){var mo=k.split("__")[1];if(mo>best)best=mo;}});if(best){month=best;setv("tada_pjp_month",best);}}
+  if(!code){box.innerHTML='<div class="hint">Employee select karo (neeche New Claim card me) — uska monthly TA/DA yahan aayega.</div>';return;}
+  if(!month){box.innerHTML='<div class="hint">Month select karo.</div>';return;}
+  var all=(typeof pjpLoad==="function")?pjpLoad():{};var dr=all[code+"__"+month];
+  if(!dr||!(dr.days&&Object.keys(dr.days).length)){box.innerHTML='<div class="hint">Is month ka PJP nahi mila. Pehle PJP tab me month plan banao.</div>';return;}
+  if(!tadaPjpSubmitted(dr)){box.innerHTML='<div class="note" style="margin:0;background:#fef9c3;border-left:3px solid #f59e0b;padding:8px 10px;border-radius:6px">⏳ PJP abhi <b>submit</b> nahi hua. PJP tab me month plan bana ke <b>Send for Approval</b> karo — uske turant baad poore month ka TA/DA yahan aa jayega.</div>';return;}
+  var p=tadaPjpProject(code,month);
+  if(!p.rows.length){box.innerHTML='<div class="hint">Is month me koi field day nahi mila (sab leave/holiday/off).</div>';return;}
+  var C={HQ:["#d1fae5","#065f46","🏛 HQ"],"Ex-HQ":["#dbeafe","#1e40af","🏘 Ex-HQ"],Outstation:["#fed7aa","#7c2d12","✈️ Out"]};
+  var h='<div style="font-size:11.5px;color:#475569;margin-bottom:6px">Designation: <b>'+escapeHtml(p.desig)+'</b> · HQ: <b>'+escapeHtml(p.hq||"—")+'</b> · '+p.rows.length+' field days · <span style="color:#166534;font-weight:700">'+escapeHtml(String(dr.status||"Submitted"))+'</span></div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;font-size:11.5px;border-collapse:collapse">';
+  h+='<thead><tr style="background:#0f172a;color:#fff">';
+  ["Date","City","Station","KM","Proj ₹","TA/DA ₹ (edit)"].forEach(function(x){h+='<th style="padding:6px;border:1px solid #334155;text-align:left;white-space:nowrap">'+x+'</th>';});
+  h+='</tr></thead><tbody>';
+  p.rows.forEach(function(r){
+    var c=C[r.station];var a=tadaPjpAmount(code,month,r.date,r.proj);
+    h+='<tr>';
+    h+='<td style="padding:5px;border:1px solid #e5e7eb;white-space:nowrap">'+ddmmyy(r.date)+'</td>';
+    h+='<td style="padding:5px;border:1px solid #e5e7eb">'+escapeHtml(r.city||"—")+'</td>';
+    h+='<td style="padding:5px;border:1px solid #e5e7eb;white-space:nowrap"><span style="font-weight:700;padding:1px 6px;border-radius:6px;background:'+(c?c[0]:"#f1f5f9")+';color:'+(c?c[1]:"#64748b")+'">'+(c?c[2]:"❓ Unknown")+'</span></td>';
+    h+='<td style="padding:5px;border:1px solid #e5e7eb">'+(r.km!=null?Math.round(r.km):"—")+'</td>';
+    h+='<td style="padding:5px;border:1px solid #e5e7eb;white-space:nowrap">'+(r.proj==null?"—":("₹"+Math.round(r.proj)))+'</td>';
+    h+='<td style="padding:5px;border:1px solid #e5e7eb"><input type="number" min="0" value="'+(a.amt==null?"":a.amt)+'" oninput="tadaPjpSetAmount(\''+code+'\',\''+month+'\',\''+r.date+'\',this.value)" style="width:82px;padding:3px 6px;font-size:11px;margin:0">'+(a.manual?' <span class="hint">(edited)</span>':'')+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  h+='<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;background:#0369a1;color:#fff;border-radius:8px;padding:8px 11px"><span style="font-weight:700">Monthly TA/DA Total</span><span style="font-weight:800;font-size:14px" id="tada_pjp_total">₹0</span></div>';
+  h+='<div class="hint" style="margin-top:6px">Auto: HQ &amp; Ex-HQ → Local DA · Outstation → Outstation DA. Travel = Ex-HQ round-trip / Outstation one-way × 2-wheeler rate × distance. Amount edit karke apne actuals daal sakte ho — total auto update ho jayega. "❓ Unknown" = city distance DB me nahi (Data tab me coordinates add karo, ya amount manually daalo).</div>';
+  box.innerHTML=h;
+  tadaPjpUpdateTotal(code,month);
+}
 function tadaInit(){
   // If in Data tab (rate config): render summary of all designations
   var rs=document.getElementById("tada_rate_summary");
@@ -9353,6 +9454,7 @@ function tadaInit(){
     var cb=document.getElementById("tada_hod_approved_toggle");
     if(cb){try{cb.checked=!!localStorage.getItem(TA_HOD_APPROVED_KEY);}catch(e){}}
     tadaRender();
+    try{tadaPjpRender();}catch(e){}
   }
 }
 
