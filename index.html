@@ -287,8 +287,8 @@ td .p.good{background:#e4f2e3;color:var(--green)} td .p.mid{background:#faf0dc;c
 .pending-banner .pb-cta{background:#7a3f10;color:#fff;padding:4px 10px;border-radius:8px;font-size:10.5px;white-space:nowrap}
 /* ─── Admin-only sections (hidden when role=employee) ─── */
 body[data-session-role="employee"] .adminonly{display:none!important}
-/* Data tab is Admin/HOD ONLY — salesmen must not see it at all (nav button + section) */
-body[data-session-role="employee"] .nav-scroll button[data-v="data"]{display:none!important}
+/* Data tab IS visible to employees — but only the non-adminonly cards (Download My Data,
+   New Store / Sec Order trackers). All upload/config/report cards are .adminonly (hidden). */
 /* bottom nav */
 /* ═══════════════ Bottom Nav — Scrollable with Arrows (Mobile-Friendly) ═══════════════ */
 .nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;align-items:stretch;z-index:50;box-shadow:0 -2px 12px rgba(0,0,0,.06);padding-bottom:env(safe-area-inset-bottom);min-height:64px}
@@ -2121,11 +2121,6 @@ document.addEventListener('DOMContentLoaded',function(){
 /* ═══════════════ end nav scroll ═══════════════ */
 
 function go(v,el){
-  // Data tab is Admin/HOD ONLY — block salesmen even if bypass makes nav think they're admin.
-  if(v==="data"&&typeof sessionIsAdminHod==="function"&&!sessionIsAdminHod()){
-    if(typeof toast==="function")toast("🔒 Data section HOD/Admin ke liye hai");
-    v="sum";el=document.querySelector('.nav-scroll button[data-v="sum"]');
-  }
   if(typeof navAllowed==="function"&&!navAllowed(v)){
     var m=(typeof navLockMsg==="function")?navLockMsg(v):"🔒 Locked";
     if(typeof toast==="function")toast(m);
@@ -2140,7 +2135,7 @@ function go(v,el){
   if(v==="pjp")pjpRefresh();
   if(v==="field"){syncFieldFromPlan();fieldRefresh();}
   if(v==="eod")prefillEod();
-  if(v==="data"){renderCityApprovals();renderPjpAdmin();renderNsTracker();renderSoTracker();if(typeof _pptFillEmpDropdown==="function")_pptFillEmpDropdown();if(typeof tadaInit==="function")tadaInit();}
+  if(v==="data"){renderCityApprovals();renderPjpAdmin();renderNsTracker();renderSoTracker();if(typeof _pptFillEmpDropdown==="function")_pptFillEmpDropdown();if(typeof tadaInit==="function")tadaInit();try{if(typeof dlFillEmpDropdown==="function")dlFillEmpDropdown();}catch(e){}try{if(typeof dlUpdateSummary==="function")dlUpdateSummary();}catch(e){}}
   if(v==="tada"){if(typeof tadaInit==="function")tadaInit();}
   // Apply employee self-only restriction after every tab switch
   try{if(typeof applyEmployeeSelfRestrictionToDropdowns==="function")applyEmployeeSelfRestrictionToDropdowns();}catch(e){}
@@ -8214,6 +8209,34 @@ function downloadMyDataExcel(){
     var cr=[ch];d.dbChanges.forEach(function(c){cr.push([c.date,c.storeName||"",c.storeType||"",c.storeCity||"",c.storeState||"",c.storeCode||"",c.currentDbCode||"",c.currentDbName||"",c.correctDbCode||"",c.correctDbName||"",c.note||"",c.ts||""]);});
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(cr),"DB_Changes");
   }
+  // Sheet 8: PJP — this employee's monthly beat plans (all months they built)
+  try{
+    var allPjp=(typeof pjpLoad==="function")?pjpLoad():{};
+    var pjh=["Month","Date","Working With","Station","Town/City","Beat/Market","Focus","Plan Status"];
+    var pjr=[pjh];
+    Object.keys(allPjp).sort().forEach(function(k){
+      var dr=allPjp[k];if(!dr||!dr.days)return;
+      if(String(dr.code||"")!==String(code)&&k.split("__")[0]!==String(code))return;
+      var mo=dr.month||k.split("__")[1]||"";
+      Object.keys(dr.days).sort().forEach(function(dt){
+        var r=dr.days[dt]||{};
+        var wk=(typeof pjpWeekOf==="function")?pjpWeekOf(+String(dt).slice(8,10)):"";
+        var focus=(typeof pjpFocusForWeek==="function")?pjpFocusForWeek(wk):"";
+        pjr.push([mo,(typeof pjpDateDMY==="function")?pjpDateDMY(dt):dt,r.ww||"",r.station||"",r.city||"",r.beat||"",focus,dr.status||""]);
+      });
+    });
+    if(pjr.length>1)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(pjr),"PJP");
+  }catch(e){}
+  // Sheet 9: TA/DA claims (this employee)
+  try{
+    var claims=(typeof taLoad==="function")?taLoad():[];
+    var mine=claims.filter(function(c){return String(c.empCode||"")===String(code)||String(c.emp||"")===String(code)||String(c.empName||"")===String(name);});
+    if(mine.length){
+      var th=["Date","Designation","Type","From","To","Mode","KM","Fare","Boarding","Lodging","Conveyance","Total ₹","Status","Remarks"];
+      var tr=[th];mine.forEach(function(c){tr.push([c.date||"",c.designation||"",c.type||"",c.fromCity||"",c.toCity||"",c.mode||"",c.km||0,c.fare||0,c.board||0,c.lodge||0,c.conv||0,c.total||0,c.status||"",c.remarks||""]);});
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(tr),"TA_DA");
+    }
+  }catch(e){}
   var stamp=(from!=="-"?from:"all")+"_to_"+(to!=="-"?to:"all");
   var fn="MyData_"+(code||"unknown")+"_"+stamp+".xlsx";
   XLSX.writeFile(wb,fn);
