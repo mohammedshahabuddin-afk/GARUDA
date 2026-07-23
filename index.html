@@ -287,6 +287,8 @@ td .p.good{background:#e4f2e3;color:var(--green)} td .p.mid{background:#faf0dc;c
 .pending-banner .pb-cta{background:#7a3f10;color:#fff;padding:4px 10px;border-radius:8px;font-size:10.5px;white-space:nowrap}
 /* ─── Admin-only sections (hidden when role=employee) ─── */
 body[data-session-role="employee"] .adminonly{display:none!important}
+/* Data tab is Admin/HOD ONLY — salesmen must not see it at all (nav button + section) */
+body[data-session-role="employee"] .nav-scroll button[data-v="data"]{display:none!important}
 /* bottom nav */
 /* ═══════════════ Bottom Nav — Scrollable with Arrows (Mobile-Friendly) ═══════════════ */
 .nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;align-items:stretch;z-index:50;box-shadow:0 -2px 12px rgba(0,0,0,.06);padding-bottom:env(safe-area-inset-bottom);min-height:64px}
@@ -2109,6 +2111,11 @@ document.addEventListener('DOMContentLoaded',function(){
 /* ═══════════════ end nav scroll ═══════════════ */
 
 function go(v,el){
+  // Data tab is Admin/HOD ONLY — block salesmen even if bypass makes nav think they're admin.
+  if(v==="data"&&typeof sessionIsAdminHod==="function"&&!sessionIsAdminHod()){
+    if(typeof toast==="function")toast("🔒 Data section HOD/Admin ke liye hai");
+    v="sum";el=document.querySelector('.nav-scroll button[data-v="sum"]');
+  }
   if(typeof navAllowed==="function"&&!navAllowed(v)){
     var m=(typeof navLockMsg==="function")?navLockMsg(v):"🔒 Locked";
     if(typeof toast==="function")toast(m);
@@ -2188,6 +2195,8 @@ function sheetRows(wb,name){var ws=wb.Sheets[name];if(!ws)return [];return XLSX.
 function uploadMaster(ev){
   var f=ev.target.files[0];if(!f)return;
   if(typeof XLSX==="undefined"){toast("Excel library not loaded \u2014 check internet");return;}
+  var _mstat=document.getElementById("master-status");
+  if(_mstat){_mstat.textContent="⏳ Reading & importing master ("+f.name+")…";_mstat.style.color="#b45309";}
   var reader=new FileReader();
   reader.onload=function(e){
     try{
@@ -2202,10 +2211,11 @@ function uploadMaster(ev){
       sheetRows(wb,"Distributors").forEach(function(r){var c=Sv(r["Distributor Code"])||Sv(r.Code);if(c)m.distributors.push({code:c,name:Sv(r["Distributor Name"])||Sv(r.Name)});});
       sheetRows(wb,"Stores").forEach(function(r){var cid=Sv(r["Client ID"]),sn=Sv(r["Store Name"]);if(cid||sn)m.stores.push({clientId:cid,companyCode:Sv(r["Actual Company Code"])||Sv(r["Company Code"]),storeName:sn,city:Sv(r["City Name"])||Sv(r.City),state:Sv(r["State Name"])||Sv(r.State),status:Sv(r.Status),dbCode:Sv(r["Distributor Code"]),dbName:Sv(r["Distributor Name"]),storeType:Sv(r["Store Type"]),emAsm:Sv(r["EM ASM NAME"]),emAsmHq:Sv(r["EM ASM HQ"])});});
       sheetRows(wb,"Products").forEach(function(r){var pc=Sv(r["Product Code"]),pn=Sv(r["Product Name"])||Sv(r.Product);if(pc||pn)m.products.push({targetBrand:Sv(r["Target Brand"]),code:pc,name:pn,brand:Sv(r["Brand Name"])||Sv(r.Brand),brandShort:Sv(r["Brand Short"]),category:Sv(r.Category),subCategory:Sv(r["Sub Category"]),range:Sv(r.Range),uom:Sv(r.UOM)||Sv(r.UMO),mrp:Sv(r.MRP),mslStatus:Sv(r["MSL Status"]),lifecycle:Sv(r.Lifecycle)});});
-      if(!m.employees.length){toast("No Employees rows found");return;}
+      if(!m.employees.length){if(_mstat){_mstat.textContent="\u26a0\ufe0f No Employees rows found \u2014 check the 'Employees' sheet & headers.";_mstat.style.color="#b91c1c";}toast("No Employees rows found");return;}
       saveMaster(m);applyMaster();fillEmpSelects();planRefresh();
+      if(_mstat){_mstat.innerHTML="\u2705 Master imported ("+m.employees.length+" employees \u00b7 "+m.stores.length+" stores \u00b7 "+m.products.length+" products) \u00b7 \u2601\ufe0f syncing to cloud\u2026";_mstat.style.color="#166534";}
       toast("Master loaded \u2713");
-    }catch(err){console.error(err);toast("Could not read this Excel");}
+    }catch(err){console.error(err);if(_mstat){_mstat.textContent="\u274c Could not read this Excel \u2014 file format check karo (.xlsx).";_mstat.style.color="#b91c1c";}toast("Could not read this Excel");}
   };
   reader.readAsArrayBuffer(f);ev.target.value="";
 }
@@ -2238,19 +2248,24 @@ function applyMaster(){
       // Auto-select self on next tick after fill
       setTimeout(function(){
         var e0=_empList[0];if(!e0)return;
-        var pCode=document.getElementById("p_emp_code");if(pCode&&!pCode.value)pCode.value=e0.code;
+        var pCode=document.getElementById("p_emp_code");var didSetPlan=false;
+        if(pCode&&!pCode.value){pCode.value=e0.code;didSetPlan=true;}
         var pName=document.getElementById("p_emp_name");if(pName&&!pName.value)pName.value=e0.name;
         var pHq=document.getElementById("p_emp_hq");if(pHq&&!pHq.value&&e0.hq)pHq.value=e0.hq;
-        var pjCode=document.getElementById("pjp_emp_code");if(pjCode&&!pjCode.value)pjCode.value=e0.code;
+        var pjCode=document.getElementById("pjp_emp_code");var didSetPjp=false;
+        if(pjCode&&!pjCode.value){pjCode.value=e0.code;didSetPjp=true;}
         var pjName=document.getElementById("pjp_emp_name");if(pjName&&!pjName.value)pjName.value=e0.name;
         var pjHq=document.getElementById("pjp_emp_hq");if(pjHq&&!pjHq.value&&e0.hq)pjHq.value=e0.hq;
         // Disable dropdowns
         [pCode,pName,pHq,pjCode,pjName,pjHq].forEach(function(el){
           if(el){el.disabled=true;el.style.background="#f1f5f9";el.style.cursor="not-allowed";}
         });
-        // Trigger resolve so downstream (station status etc.) refresh
-        try{if(typeof pjpEmpResolve==="function")pjpEmpResolve("code");}catch(e){}
-        try{if(typeof planEmpResolve==="function")planEmpResolve("code");}catch(e){}
+        // Trigger the SAME resolve chain a manual selection would (fills PJP state/town/city,
+        // targets, gating). Plan tab resolver is empResolve() — NOT "planEmpResolve" (which
+        // never existed, so self-only employees saw blank state/town). Only fire on first
+        // auto-select so a later pull does not wipe an in-progress edit.
+        try{if(didSetPjp&&typeof pjpEmpResolve==="function")pjpEmpResolve("code");}catch(e){}
+        try{if(didSetPlan&&typeof empResolve==="function")empResolve("code");}catch(e){}
       },0);
     }
   }catch(e){}
@@ -2318,7 +2333,62 @@ function pjpAutoFill(code,date){
 function onTownPjp(){var code=elv("p_emp_code"),date=elv("p_date"),town=elv("p_town_pjp");fillBeats(code,date,town);document.getElementById("p_focus_box").style.display="none";updateStatePjp(code);}
 function onBeatPjp(){focusFor(elv("p_emp_code"),elv("p_date"),elv("p_town_pjp"),elv("p_beat_pjp"));}
 function resetHodApproval(){HODstate.decision="";HODstate.sent=false;var s=document.getElementById("p_approve_state");if(s)s.innerHTML="";var ss=document.getElementById("p_send_stage");if(ss)ss.style.display="none";var as=document.getElementById("p_after_send");if(as)as.style.display="none";stopHodTimer();}
-function planGate(){var need=wwNeedsApproval();var locked=need&&HODstate.decision!=="app"&&!fullAccess();var pc=document.getElementById("p_plan_card");if(pc)pc.classList.toggle("gated",locked);var sv=document.getElementById("p_save_btn");if(sv)sv.disabled=locked;var lb=document.getElementById("p_gate_note");if(lb)lb.style.display=locked?"":"none";}
+/* ── Plan-deviation approval state (keyed by code__date in the Deviations store) ── */
+function planDevStatus(code,date){if(!code||!date)return "";var arr=(typeof devLoad==="function")?devLoad():[];var id=code+"__"+date;for(var i=0;i<arr.length;i++){if(arr[i].id===id)return String(arr[i].status||"");}return "";}
+function planDevRemarks(code,date){if(!code||!date)return "";var arr=(typeof devLoad==="function")?devLoad():[];var id=code+"__"+date;for(var i=0;i<arr.length;i++){if(arr[i].id===id)return String(arr[i].hodRemarks||"");}return "";}
+function planDevApproved(code,date){return /approved/i.test(planDevStatus(code,date));}
+/* Submit the plan change for HOD approval → creates/updates a Pending deviation that
+   shows in BOTH the HOD and Admin dashboards (Summary → Approvals) and syncs. Returns
+   true if recorded. Covers ALL "not going per original plan" cases (off-PJP beat,
+   unplanned meeting/activity, unplanned leave/sick leave). */
+function planSubmitDeviation(){
+  var code=elv("p_emp_code"),date=elv("p_date");
+  if(!code||!date){toast("Employee + date select karo");return false;}
+  if(!wwNeedsApproval()){toast("No deviation — approval zaroori nahi");return false;}
+  var d=(typeof hodMsg==="function")?hodMsg():{valid:true,summary:""};
+  if(!d.valid){toast("Pehle change ki details bharo (town/beat ya reason)");return false;}
+  var ww=elv("p_ww");
+  var planned=(typeof pjpWwForDate==="function")?(pjpWwForDate(code,date)||"Self Working"):"Self Working";
+  var actual=ww;
+  if(isFieldWork(ww)){var t=elv("p_town_other_sel").trim(),b=elv("p_beat_other").trim();actual=ww+" — Off-PJP: "+((t&&t!=="__add__")?t:"?")+(b?(" / "+b):"");}
+  else if(ww==="Meeting / Activity"){actual=ww+(elv("p_ww_acttype")?(" — "+elv("p_ww_acttype")):"");}
+  else if(ww==="Leave"||ww==="Sick Leave"){actual=ww+(elv("p_ww_leave_reason")?(" — "+elv("p_ww_leave_reason")):"");}
+  var arr=(typeof devLoad==="function")?devLoad():[];var id=code+"__"+date;var ex=null;for(var i=0;i<arr.length;i++){if(arr[i].id===id){ex=arr[i];break;}}
+  var now=Date.now();
+  var rec=ex||{id:id,code:code,date:date};
+  rec.emp=elv("p_emp_name")||"";rec.plannedWw=planned;rec.actualWw=actual;
+  rec.reason=(d.summary||"Plan changed");rec.status="Pending";rec.hodRemarks="";rec.ts=(typeof nowTime==="function")?nowTime():"";rec.updatedAt=now;
+  if(!ex)arr.push(rec);
+  if(typeof devSaveAll==="function")devSaveAll(arr);
+  try{if(window.__sync&&window.__sync.pushDeviation)window.__sync.pushDeviation(rec);}catch(e){}
+  try{if(typeof updateApprBadge==="function")updateApprBadge();}catch(e){}
+  return true;
+}
+/* Gate: until a required deviation is HOD-Approved, HIDE Today's Target & Plan + Save. */
+function planGate(){
+  var need=wwNeedsApproval();
+  var code=elv("p_emp_code"),date=elv("p_date");
+  var status=need?planDevStatus(code,date):"";
+  // Real Admin/HOD skip the gate; employees are gated even under launch-bypass (this is a
+  // genuine approval, not chain-gating) — so use role, not fullAccess().
+  var isBoss=(typeof sessionIsAdminHod==="function")&&sessionIsAdminHod();
+  var open=isBoss||!need||/approved/i.test(status);
+  var pc=document.getElementById("p_plan_card");if(pc)pc.style.display=open?"":"none";
+  var sv=document.getElementById("p_save_btn");if(sv)sv.style.display=open?"":"none";
+  var po=document.getElementById("plan-out");if(po&&!open)po.innerHTML="";
+  var lb=document.getElementById("p_gate_note");
+  if(lb){
+    if(open){lb.style.display="none";}
+    else{
+      lb.style.display="";
+      var msg;
+      if(/pending/i.test(status))msg="⏳ <b>Pending HOD approval.</b> Aapne plan change kiya hai — HOD/Admin ke approve karne ke baad hi <b>Today's Target &amp; Plan</b> section khulega.";
+      else if(/rejected/i.test(status))msg="✖ <b>HOD ne reject kiya"+(planDevRemarks(code,date)?(": "+escapeHtml(planDevRemarks(code,date))):"")+".</b> Plan revise karke dobara <b>Send for Approval</b> bhejo.";
+      else msg="🔒 <b>Is change ke liye HOD approval chahiye.</b> Upar <b>HOD Approval</b> box me <b>Send for Approval</b> dabao. Approve hone tak Today's Target &amp; Plan hidden rahega.";
+      lb.innerHTML=msg+' <button type="button" class="btn btn-ghost small" style="margin-top:6px" onclick="scrollToApprove()">⬆️ Approval box</button>';
+    }
+  }
+}
 function townMode(mode){document.querySelectorAll("#p_town_seg .seg-btn").forEach(function(b){b.classList.toggle("on",b.dataset.v===mode);});var yes=(mode==="yes");document.getElementById("p_pjp_wrap").style.display=yes?"":"none";document.getElementById("p_other_wrap").style.display=yes?"none":"";var c=elv("p_emp_code"),d=elv("p_date");if(yes){if(c)pjpAutoFill(c,d);}else{if(c)fillStateOther(c);}updateApprovalBox();planGate();}
 function wwMode(){var v=elv("p_ww");var code=elv("p_emp_code"),date=elv("p_date");var field=isFieldWork(v);var name=document.getElementById("p_ww_name");var showName=(v==="ME Sales Team"||v==="BA Supervisor");name.style.display=showName?"":"none";if(!showName)name.value="";name.placeholder=(v==="ME Sales Team")?"Sales person name":"BA Supervisor name";var act=document.getElementById("p_ww_act");var showAct=(v==="Meeting / Activity");act.style.display=showAct?"":"none";if(!showAct){setv("p_ww_acttype","");setv("p_ww_remark","");}var isLeaveType=(v==="Leave"||v==="Sick Leave");var showLv=isLeaveType&&wwNeedsApproval();var lv=document.getElementById("p_ww_leave");if(lv)lv.style.display=showLv?"":"none";if(!showLv){setv("p_ww_leave_reason","");setv("p_ww_leave_remark","");}var fw=document.getElementById("p_field_wrap");if(fw)fw.style.display=field?"":"none";if(field){var on=document.querySelector("#p_town_seg .seg-btn.on");var mode=(on&&on.dataset.v)||"yes";document.getElementById("p_pjp_wrap").style.display=(mode==="yes")?"":"none";document.getElementById("p_other_wrap").style.display=(mode==="yes")?"none":"";if(code){if(mode==="yes")pjpAutoFill(code,date);else fillStateOther(code);}}if(code)renderTargets(code,date);updateApprovalBox();planGate();}
 function workingDays(code,date){
@@ -2343,8 +2413,14 @@ var hodTimer=null,hodRemain=0;
 function startHodTimer(){var el=document.getElementById("p_wait_timer");if(!el)return;hodRemain=120;clearInterval(hodTimer);var tick=function(){if(hodRemain>0){el.className="wait-timer";el.innerHTML="⏳ Waiting for HOD approval: <b>"+fmtWait(hodRemain)+"</b> — fields will auto-enable when this ends.";hodRemain--;}else{clearInterval(hodTimer);hodTimer=null;autoApprove();}};el.style.display="";tick();hodTimer=setInterval(tick,1000);}
 function stopHodTimer(){clearInterval(hodTimer);hodTimer=null;var el=document.getElementById("p_wait_timer");if(el){el.style.display="none";el.innerHTML="";}}
 function scrollToApprove(){var b=document.querySelector(".approve-box");if(b&&b.scrollIntoView)b.scrollIntoView({behavior:"smooth",block:"center"});}
-function sendForApproval(){var d=hodMsg();if(!d.valid){toast("Fill the required details first");return;}var ss=document.getElementById("p_send_stage");if(ss)ss.style.display="";toast("Now send via WhatsApp or Mail (separately)");}
-function sendReq(mode){var m=loadMaster();var d=hodMsg();if(!d.valid){toast("Fill the required details first");return;}var body=d.body;if(mode==="email"){var to=(hodTo==="hod")?((m&&m.config.HOD_Email_ID)||""):((m&&m.config.Admin_Email_ID)||"");if(to){window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(to)+"&su="+encodeURIComponent("Approval needed - "+d.name)+"&body="+encodeURIComponent(body),"_blank");}else{fallbackCopy(body);toast("Email id missing - copied");}}else{var num2=(hodTo==="hod")?((m&&m.config.HOD_WhatsApp)||""):((m&&m.config.Admin_WhatsApp)||"");num2=String(num2).replace(/\D/g,"");if(num2.length===10)num2="91"+num2;if(num2){window.open("https://wa.me/"+num2+"?text="+encodeURIComponent(body),"_blank");}else{fallbackCopy(body);toast("Number missing - copied");}}var as=document.getElementById("p_after_send");if(as)as.style.display="";if(!HODstate.sent){HODstate.sent=true;startHodTimer();toast("Sent — waiting for HOD approval");}}
+function sendForApproval(){
+  // Record the change as a Pending deviation → lands in HOD + Admin dashboards (Summary → Approvals) and syncs.
+  if(!planSubmitDeviation())return;
+  var ss=document.getElementById("p_send_stage");if(ss)ss.style.display="";
+  planGate();
+  toast("📤 HOD/Admin dashboard me bhej diya — ab WhatsApp/Mail se bhi notify kar sakte ho. Approve hone tak plan locked.");
+}
+function sendReq(mode){var m=loadMaster();var d=hodMsg();if(!d.valid){toast("Fill the required details first");return;}var body=d.body;if(mode==="email"){var to=(hodTo==="hod")?((m&&m.config.HOD_Email_ID)||""):((m&&m.config.Admin_Email_ID)||"");if(to){window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(to)+"&su="+encodeURIComponent("Approval needed - "+d.name)+"&body="+encodeURIComponent(body),"_blank");}else{fallbackCopy(body);toast("Email id missing - copied");}}else{var num2=(hodTo==="hod")?((m&&m.config.HOD_WhatsApp)||""):((m&&m.config.Admin_WhatsApp)||"");num2=String(num2).replace(/\D/g,"");if(num2.length===10)num2="91"+num2;if(num2){window.open("https://wa.me/"+num2+"?text="+encodeURIComponent(body),"_blank");}else{fallbackCopy(body);toast("Number missing - copied");}}var as=document.getElementById("p_after_send");if(as)as.style.display="";var wt=document.getElementById("p_wait_timer");if(wt){wt.className="wait-timer";wt.style.display="";wt.innerHTML="⏳ <b>Waiting for HOD/Admin approval.</b> Approve hote hi (dashboard se) aapka plan auto-unlock ho jayega — sync ke baad.";}HODstate.sent=true;toast("Sent — HOD/Admin dashboard me approval ke liye pahunch gaya");}
 function autoApprove(){HODstate.decision="app";var s=document.getElementById("p_approve_state");if(s)s.innerHTML='<b style="color:#2c5f2d">✅ Approved by HOD</b> — all fields below are now enabled. Continue with your plan.';var el=document.getElementById("p_wait_timer");if(el){el.className="wait-timer done";el.innerHTML="✅ Approved — fields enabled.";el.style.display="";}planGate();toast("✅ Approved — fields enabled");var pc=document.getElementById("p_plan_card");if(pc&&pc.scrollIntoView)pc.scrollIntoView({behavior:"smooth",block:"start"});}
 function hodMsg(){var m=loadMaster();var emp=elv("p_emp_name")||elv("p_emp_code")||"-";var hodName=(m&&m.config.HOD_Name)?m.config.HOD_Name:"HOD";var date=ddmmyy(elv("p_date"));var eMob=empMobOf(emp);var ww=elv("p_ww");var detail="",summary="",valid=false;if(isFieldWork(ww)){var town=elv("p_town_other_sel").trim();if(town==="__add__")town="";var beat=elv("p_beat_other").trim(),foc=elv("p_focus_other").trim();valid=!!(town||beat);detail="New Town/City: "+(town||"-")+"\nNew Beat/Market: "+(beat||"-")+(foc?("\nFocus: "+foc):"");summary=(beat||town||"Off-PJP beat");}else if(ww==="Meeting / Activity"){var at=elv("p_ww_acttype"),dur=elv("p_ww_dur"),rmk=elv("p_ww_remark").trim();valid=!!rmk;detail="Unplanned Meeting/Activity: "+(at||"-")+(dur?(" ("+dur+")"):"")+"\nRemark: "+(rmk||"-");summary=(at||"Meeting/Activity");}else if(ww==="Leave"||ww==="Sick Leave"){var rs=elv("p_ww_leave_reason").trim(),rm=elv("p_ww_leave_remark").trim();valid=!!(rs&&rm);detail=ww+" (unplanned)\nReason: "+(rs||"-")+"\nRemark: "+(rm||"-");summary=ww;}var ref=emp+" "+date+(summary?(" ("+summary+")"):"");var appLink=eMob?("https://wa.me/"+eMob+"?text="+encodeURIComponent("APPROVED - "+ref)):"";var rejLink=eMob?("https://wa.me/"+eMob+"?text="+encodeURIComponent("NOT APPROVED - "+ref)):"";var body=hodName+" Sir, approval needed:\nName: "+emp+"\nDate: "+date+"\n"+detail+"\n\nReply in one tap:"+(appLink?("\n✅ Approve: "+appLink):"")+(rejLink?("\n❌ Reject: "+rejLink):"")+"\n\n(Or reply directly: Approved / Not Approved)";return {name:emp,valid:valid,summary:summary,body:body};}
 function sendHODApproval(mode){
@@ -2480,7 +2556,7 @@ function rejectCity(i){var pend=pendCities();pend.splice(i,1);savePendCities(pen
 
 
 /* ---------------- SAVE PLAN ---------------- */
-function savePlan(){var m=loadMaster();var name=elv("p_emp_name"),code=elv("p_emp_code"),date=elv("p_date");if(!name){toast("Select an employee");return;}if(!date){toast("Pick a date");return;}if(!fullAccess()&&!planPjpOk()){toast("Pehle is month ka PJP approve karwao - PJP tab");gotoPjpFromPlan();return;}var emp=m?m.employees.filter(function(e){return e.code===code||e.name===name;})[0]:null;var ww=elv("p_ww");var field=isFieldWork(ww);var town="",beat="",focus="",week="",offpjp=false,approval="";if(field){var yes=document.querySelector("#p_town_seg .seg-btn.on").dataset.v==="yes";if(yes){town=elv("p_town_pjp");beat=elv("p_beat_pjp");var pr=pjpForDate(code,date);week=pr?pr.week:"";focus=document.getElementById("p_focus_box").dataset.focus||"";}else{town=elv("p_town_other_sel").trim();if(town==="__add__"){toast("Add & submit the new city first");return;}beat=elv("p_beat_other").trim();focus=elv("p_focus_other").trim();offpjp=true;}if(!town){toast("Select / enter town");return;}}else{if(ww==="Meeting / Activity"){if(!elv("p_ww_remark").trim()){toast("Please enter remarks");return;}}if((ww==="Leave"||ww==="Sick Leave")&&wwNeedsApproval()){if(!elv("p_ww_leave_reason").trim()){toast("Please enter the reason");return;}if(!elv("p_ww_leave_remark").trim()){toast("Please enter remarks");return;}}}if(!fullAccess()&&wwNeedsApproval()){if(HODstate.decision==="rej"){toast("Not approved — revert to planned PJP");return;}if(HODstate.decision!=="app"){toast("HOD approval needed before saving");return;}approval="Approved";}var wwFull=ww;if(ww==="ME Sales Team"||ww==="BA Supervisor"){var wwName=elv("p_ww_name").trim();wwFull=ww+(wwName?(" — "+wwName):"");}else if(ww==="Meeting / Activity"){var at=elv("p_ww_acttype"),dur=elv("p_ww_dur"),rmk=elv("p_ww_remark").trim();wwFull="Meeting/Activity"+(at?(" — "+at):"")+(dur?(" ("+dur+")"):"")+(rmk?(" · "+rmk):"");}else if(ww==="Leave"||ww==="Sick Leave"){var rs=elv("p_ww_leave_reason").trim(),rm=elv("p_ww_leave_remark").trim();wwFull=ww+(rs?(" — "+rs):"")+(rm?(" · "+rm):"");}var tgt=null;if(field){var T=DAILY_ORDER_TGT;tgt={fixed:true,totalDay:T.totalDay,mtd:T.mtd,mtdDays:T.mtdDays,tdc:T.tdcSub,BB:0.25,AQ:0.15,DRS:0.10,CC:0.10};}var db=load();var id=recId(name,date);var r=db[id]||{};r.date=date;r.employee=name;r.code=code;r.zone=emp?emp.zone:"";r.hq=emp?emp.hq:"";r.desig=emp?emp.desig:"";r.town=town;r.beat=beat;r.focus=focus;r.week=week;r.offpjp=offpjp;r.approval=approval;r.workingWith=wwFull;r.sc=field?num(elv("p_sc")):0;r.nsoPlan=field?num(elv("p_nso")):0;r.posmPlan=field?num(elv("p_posm")):0;r.tgt=tgt;r.planTime=nowTime();r.planDone=true;db[id]=r;save(db);try{recordPlanDeviation(r);}catch(e){}toast("Plan saved ✓");document.getElementById("plan-out").innerHTML=planMsgHtml(r);updatePlanStatus();}
+function savePlan(){var m=loadMaster();var name=elv("p_emp_name"),code=elv("p_emp_code"),date=elv("p_date");if(!name){toast("Select an employee");return;}if(!date){toast("Pick a date");return;}if(!fullAccess()&&!planPjpOk()){toast("Pehle is month ka PJP approve karwao - PJP tab");gotoPjpFromPlan();return;}var emp=m?m.employees.filter(function(e){return e.code===code||e.name===name;})[0]:null;var ww=elv("p_ww");var field=isFieldWork(ww);var town="",beat="",focus="",week="",offpjp=false,approval="";if(field){var yes=document.querySelector("#p_town_seg .seg-btn.on").dataset.v==="yes";if(yes){town=elv("p_town_pjp");beat=elv("p_beat_pjp");var pr=pjpForDate(code,date);week=pr?pr.week:"";focus=document.getElementById("p_focus_box").dataset.focus||"";}else{town=elv("p_town_other_sel").trim();if(town==="__add__"){toast("Add & submit the new city first");return;}beat=elv("p_beat_other").trim();focus=elv("p_focus_other").trim();offpjp=true;}if(!town){toast("Select / enter town");return;}}else{if(ww==="Meeting / Activity"){if(!elv("p_ww_remark").trim()){toast("Please enter remarks");return;}}if((ww==="Leave"||ww==="Sick Leave")&&wwNeedsApproval()){if(!elv("p_ww_leave_reason").trim()){toast("Please enter the reason");return;}if(!elv("p_ww_leave_remark").trim()){toast("Please enter remarks");return;}}}if((typeof sessionIsAdminHod!=="function"||!sessionIsAdminHod())&&wwNeedsApproval()){if(!planDevApproved(code,date)){var _ds=planDevStatus(code,date);toast(/pending/i.test(_ds)?"⏳ HOD approval pending — approve hone ke baad hi save hoga":(/rejected/i.test(_ds)?"✖ HOD ne reject kiya — plan revise karke dobara bhejo":"Pehle 'Send for Approval' dabao — HOD approve karega tab plan save hoga"));return;}approval="Approved";}var wwFull=ww;if(ww==="ME Sales Team"||ww==="BA Supervisor"){var wwName=elv("p_ww_name").trim();wwFull=ww+(wwName?(" — "+wwName):"");}else if(ww==="Meeting / Activity"){var at=elv("p_ww_acttype"),dur=elv("p_ww_dur"),rmk=elv("p_ww_remark").trim();wwFull="Meeting/Activity"+(at?(" — "+at):"")+(dur?(" ("+dur+")"):"")+(rmk?(" · "+rmk):"");}else if(ww==="Leave"||ww==="Sick Leave"){var rs=elv("p_ww_leave_reason").trim(),rm=elv("p_ww_leave_remark").trim();wwFull=ww+(rs?(" — "+rs):"")+(rm?(" · "+rm):"");}var tgt=null;if(field){var T=DAILY_ORDER_TGT;tgt={fixed:true,totalDay:T.totalDay,mtd:T.mtd,mtdDays:T.mtdDays,tdc:T.tdcSub,BB:0.25,AQ:0.15,DRS:0.10,CC:0.10};}var db=load();var id=recId(name,date);var r=db[id]||{};r.date=date;r.employee=name;r.code=code;r.zone=emp?emp.zone:"";r.hq=emp?emp.hq:"";r.desig=emp?emp.desig:"";r.town=town;r.beat=beat;r.focus=focus;r.week=week;r.offpjp=offpjp;r.approval=approval;r.workingWith=wwFull;r.sc=field?num(elv("p_sc")):0;r.nsoPlan=field?num(elv("p_nso")):0;r.posmPlan=field?num(elv("p_posm")):0;r.tgt=tgt;r.planTime=nowTime();r.planDone=true;db[id]=r;save(db);try{recordPlanDeviation(r);}catch(e){}toast("Plan saved ✓");document.getElementById("plan-out").innerHTML=planMsgHtml(r);updatePlanStatus();}
 function planMsgHtml(r){window._lastPlanRec=r;return msgActions(buildPlanMsg(r),"Plan ready \u2014 send to HOD / ZM / RSM / ASM",true);}
 function buildPlanMsg(r){
   var m=loadMaster();var grp=(m&&m.config.Group_Name)?m.config.Group_Name:"";
@@ -3897,12 +3973,13 @@ function renderPjpList(){
     else if(off){h+='<div class="note" style="margin:5px 0 0;color:#8a3520;font-weight:600">'+escapeHtml(off)+'</div>';}
     else{
       h+='<div class="hint" style="margin-top:3px">\uD83C\uDFAF '+escapeHtml(pjpFocusForWeek(wk))+'</div>';
-      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div>';}
-      else{h+='<div style="display:grid;grid-template-columns:1fr minmax(130px,auto) 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpUpdateStationBadge(\''+dt+'\',this.value)">'+pjpStationBadgeHtml(dt,row.city||"")+'<input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div>';}
+      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div>'+pjpTadaBlockHtml(dr,dt,true);}
+      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpDayCityChanged(\''+dt+'\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div>'+pjpTadaBlockHtml(dr,dt,false);}
     }
     h+='</div>';
   });
-  box.innerHTML=h;pjpUpdateCount();
+  var bar='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#0f2942;color:#fff;border-radius:9px;padding:9px 12px;margin-bottom:9px"><span style="font-weight:700;font-size:12px">💰 Projected Monthly TA/DA</span><span style="font-weight:800;font-size:15px" id="pjp_ta_total">₹0</span></div><div class="hint" style="margin:-4px 0 9px">Auto-projected from Station + distance (2-wheeler rate). Edit any day\'s ₹ or Confirm — cleared field reverts to auto.</div>';
+  box.innerHTML=bar+h;pjpUpdateCount();pjpUpdateMonthTa();
 }
 function pjpSetCell(dt,field,val){var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={city:"",beat:""};dr.days[dt][field]=val;savePjpDraft(dr);renderCoverage();pjpUpdateCount();}
 function pjpSetOff(sel){var dt=sel.getAttribute("data-dt");var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.offDays)dr.offDays={};var v=sel.value;if(v)dr.offDays[dt]=v;else delete dr.offDays[dt];savePjpDraft(dr);renderPjpList();renderCoverage();}
@@ -4084,6 +4161,130 @@ function genMonthPjp(code,zone,month,days,offDays,status){
 function pjpDayType(dr,date){var dow=new Date(date+"T00:00:00").getDay();if(dow===0)return {type:"Weekly Off"};var row=(dr.days&&dr.days[date])||{};var ww=row.ww||"Self Working";if(!pjpIsField(ww))return {type:"Filled"};if((row.city||"").trim()&&(row.beat||"").trim())return {type:"Filled"};return {type:"Unassigned"};}
 function pjpSetWw(sel){var dt=sel.getAttribute("data-dt");var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};dr.days[dt].ww=sel.value;savePjpDraft(dr);renderPjpList();renderCoverage();}
 function pjpSetCell(dt,field,val){var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};dr.days[dt][field]=val;savePjpDraft(dr);renderCoverage();pjpUpdateCount();if(field==="city"){try{renderStationStatus();}catch(e){}}}
+
+/* ===== PJP per-day Station classification + TA/DA projection =====
+   Station: HQ / Ex-HQ / Outstation auto-derived from city (window.__station), overridable per day.
+   TA/DA projection (editable, confirmable):
+     DA   : HQ & Ex-HQ -> Local DA ; Outstation -> Outstation DA   (designation rate table)
+     Travel: HQ -> 0 ; Ex-HQ -> 2 x km x per-km (round trip, same day) ; Outstation -> 1 x km x per-km
+     per-km uses the 2-wheeler rate by default (amount is editable). Distance = straight-line from HQ. */
+function pjpEmpDesigForRates(code){
+  var m=(typeof loadMaster==="function")?loadMaster():null;
+  var e=m?empByAny(m,code,"","","code"):null;
+  var d=((e&&(e.desig||e.designation))||"").toUpperCase();
+  var list=(typeof taRatesDesigList==="function")?taRatesDesigList():["SBDE"];
+  return (list.indexOf(d)>=0)?d:(list[0]||"SBDE");
+}
+function pjpDayStationAuto(dr,dt){
+  var row=(dr.days&&dr.days[dt])||{};
+  var hq=elv("pjp_emp_hq")||"";
+  if(window.__station&&window.__station.computeStationStatus){return window.__station.computeStationStatus(hq,row.city||"");}
+  return {status:"Unknown",km:null};
+}
+function pjpDayStation(dr,dt){
+  var row=(dr.days&&dr.days[dt])||{};var auto=pjpDayStationAuto(dr,dt);
+  return {status:row.station||auto.status,km:auto.km,overridden:!!row.station};
+}
+function pjpProjectTa(dr,dt){
+  var row=(dr.days&&dr.days[dt])||{};var ww=row.ww||"Self Working";
+  if(!pjpIsField(ww))return {na:true,amt:0};
+  var s=pjpDayStation(dr,dt);var desig=pjpEmpDesigForRates(dr.code);
+  var rates=(typeof taRatesLoad==="function")?taRatesLoad(desig):{perKm2w:4,localDA:200,outDA:500};
+  var km=(s.km!=null)?Math.round(s.km):0;var travel=0,da=0,trips=0;
+  if(s.status==="HQ"){travel=0;da=rates.localDA;trips=0;}
+  else if(s.status==="Ex-HQ"){trips=2;travel=trips*km*rates.perKm2w;da=rates.localDA;}
+  else if(s.status==="Outstation"){trips=1;travel=trips*km*rates.perKm2w;da=rates.outDA;}
+  else return {unknown:true,amt:null,status:s.status,km:s.km,desig:desig};
+  return {amt:travel+da,travel:travel,da:da,km:km,trips:trips,status:s.status,desig:desig};
+}
+function pjpDayTaAmount(dr,dt){
+  var row=(dr.days&&dr.days[dt])||{};
+  if(row.ta!=null&&row.ta!==""){return {amt:+row.ta,manual:true};}
+  var p=pjpProjectTa(dr,dt);return {amt:(p.amt==null?null:Math.round(p.amt)),manual:false,proj:p};
+}
+function pjpMonthTaTotal(dr){
+  var t=0;pjpDatesInMonth(dr.month).forEach(function(dt){
+    if(new Date(dt+"T00:00:00").getDay()===0)return;
+    var row=(dr.days&&dr.days[dt])||{};if(!pjpIsField(row.ww||"Self Working"))return;
+    var a=pjpDayTaAmount(dr,dt);if(a.amt!=null)t+=a.amt;
+  });return t;
+}
+function pjpTadaBlockHtml(dr,dt,lock){
+  var row=(dr.days&&dr.days[dt])||{};var s=pjpDayStation(dr,dt);
+  var C={HQ:["#d1fae5","#065f46","🏛 HQ"],"Ex-HQ":["#dbeafe","#1e40af","🏘 Ex-HQ"],Outstation:["#fed7aa","#7c2d12","✈️ Outstation"]};
+  var a=pjpDayTaAmount(dr,dt);var amtStr=(a.amt==null)?"":String(a.amt);
+  var kmStr=(s.km!=null)?("~"+Math.round(s.km)+" KM"):"— KM";
+  var h='<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:#f8fafc;border:1px solid #e6edf3;border-radius:8px;padding:6px 9px;font-size:11.5px">';
+  h+='<span style="font-weight:700;color:#334155">📍 Station</span>';
+  if(!lock){
+    h+='<select id="stnsel_'+dt+'" onchange="pjpSetStation(\''+dt+'\',this.value)" style="width:auto;padding:3px 6px;font-size:11px;margin:0">';
+    h+='<option value=""'+(C[s.status]?"":" selected")+'>— set —</option>';
+    ["HQ","Ex-HQ","Outstation"].forEach(function(o){h+='<option value="'+o+'"'+(s.status===o?" selected":"")+'>'+C[o][2]+'</option>';});
+    h+='</select>';
+  }else{var c=C[s.status];h+='<span style="font-weight:800;padding:2px 8px;border-radius:6px;background:'+(c?c[0]:"#f1f5f9")+';color:'+(c?c[1]:"#64748b")+'">'+(c?c[2]:"❓ Unknown")+'</span>';}
+  h+='<span class="hint" id="takm_'+dt+'" style="margin:0">'+kmStr+'</span>';
+  h+='<span style="width:1px;height:15px;background:#cbd5e1"></span>';
+  h+='<span style="font-weight:700;color:#334155">💰 TA/DA</span>';
+  if(!lock){
+    h+='<span style="display:inline-flex;align-items:center;gap:2px">₹<input id="taproj_'+dt+'" type="number" min="0" value="'+escAttr(amtStr)+'" oninput="pjpSetTa(\''+dt+'\',this.value)" style="width:78px;padding:3px 6px;font-size:11px;margin:0"></span>';
+    h+='<button id="tabtn_'+dt+'" class="btn btn-ghost small" onclick="pjpConfirmTa(\''+dt+'\')" style="width:auto;padding:3px 10px;margin:0;font-size:11px'+(row.taOk?';background:#d1fae5;color:#065f46;border-color:#34d399':'')+'">'+(row.taOk?"✓ Confirmed":"Confirm")+'</button>';
+  }else{
+    h+='<span style="font-weight:800;color:#0369a1">'+(amtStr?("₹"+(+amtStr).toLocaleString("en-IN")):"—")+'</span>';
+    if(row.taOk)h+='<span style="font-weight:700;color:#065f46">✓</span>';
+  }
+  h+='<span class="hint" style="margin:0">'+(a.manual?"(edited)":"(auto)")+'</span>';
+  h+='</div>';return h;
+}
+function pjpSetStation(dt,val){
+  var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;
+  if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};
+  var auto=pjpDayStationAuto(dr,dt);
+  if(val&&val!==auto.status)dr.days[dt].station=val;else delete dr.days[dt].station;
+  delete dr.days[dt].ta;dr.days[dt].taOk=false;   // station changed -> re-project & re-confirm
+  savePjpDraft(dr);pjpRefreshDayTa(dt);
+}
+function pjpSetTa(dt,val){
+  var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;
+  if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};
+  if(val===""||val==null)delete dr.days[dt].ta;else dr.days[dt].ta=Math.max(0,Math.round(+val||0));
+  dr.days[dt].taOk=false;savePjpDraft(dr);pjpUpdateTaConfirmBtn(dt);pjpUpdateMonthTa();
+}
+function pjpConfirmTa(dt){
+  var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;
+  if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};
+  if(dr.days[dt].ta==null||dr.days[dt].ta===""){var a=pjpDayTaAmount(dr,dt);if(a.amt!=null)dr.days[dt].ta=Math.round(a.amt);}
+  dr.days[dt].taOk=true;savePjpDraft(dr);pjpUpdateTaConfirmBtn(dt);pjpUpdateMonthTa();
+  toast("TA/DA confirmed — "+pjpDateDMY(dt)+" ✓");
+}
+function pjpUpdateTaConfirmBtn(dt){
+  var b=document.getElementById("tabtn_"+dt);if(!b)return;
+  var dr=getPjpDraft();var row=(dr&&dr.days&&dr.days[dt])||{};
+  if(row.taOk){b.textContent="✓ Confirmed";b.style.background="#d1fae5";b.style.color="#065f46";b.style.borderColor="#34d399";}
+  else{b.textContent="Confirm";b.style.background="";b.style.color="";b.style.borderColor="";}
+}
+function pjpUpdateMonthTa(){
+  var el=document.getElementById("pjp_ta_total");if(!el)return;
+  var dr=getPjpDraft();el.textContent=dr?("₹"+Math.round(pjpMonthTaTotal(dr)).toLocaleString("en-IN")):"₹0";
+}
+function pjpRefreshDayTa(dt){
+  var dr=getPjpDraft();if(!dr)return;var row=(dr.days&&dr.days[dt])||{};var s=pjpDayStation(dr,dt);
+  var sel=document.getElementById("stnsel_"+dt);if(sel)sel.value=(s.status&&s.status!=="Unknown")?s.status:"";
+  var kmEl=document.getElementById("takm_"+dt);if(kmEl)kmEl.textContent=(s.km!=null?("~"+Math.round(s.km)+" KM"):"— KM");
+  var inp=document.getElementById("taproj_"+dt);if(inp){var a=pjpDayTaAmount(dr,dt);inp.value=(a.amt==null?"":a.amt);}
+  pjpUpdateTaConfirmBtn(dt);pjpUpdateMonthTa();
+}
+function pjpDayCityChanged(dt,city){
+  try{if(window.pjpUpdateStationBadge)window.pjpUpdateStationBadge(dt,city);}catch(e){}
+  var dr=getPjpDraft();var row=(dr&&dr.days&&dr.days[dt])||{};
+  if(!row.taOk&&(row.ta==null||row.ta==="")){pjpRefreshDayTa(dt);}      // live projection follows the city
+  else{                                                                  // manual/confirmed amount kept, refresh station+km+total only
+    var sel=document.getElementById("stnsel_"+dt);if(sel&&!row.station){var s=pjpDayStation(dr,dt);sel.value=(s.status&&s.status!=="Unknown")?s.status:"";}
+    var kmEl=document.getElementById("takm_"+dt);if(kmEl){var s2=pjpDayStation(dr,dt);kmEl.textContent=(s2.km!=null?("~"+Math.round(s2.km)+" KM"):"— KM");}
+    pjpUpdateMonthTa();
+  }
+}
+/* ===== end PJP Station + TA/DA projection ===== */
+
 function renderPjpList(){
   var box=document.getElementById("pjp_list");if(!box)return;
   var dr=getPjpDraft();
@@ -4107,13 +4308,14 @@ function renderPjpList(){
     if(sun){}
     else if(field){
       h+='<div class="hint" style="margin-top:3px">\uD83C\uDFAF '+escapeHtml(pjpFocusForWeek(wk))+'</div>';
-      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div>';}
-      else{h+='<div style="display:grid;grid-template-columns:1fr minmax(130px,auto) 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpUpdateStationBadge(\''+dt+'\',this.value)">'+pjpStationBadgeHtml(dt,row.city||"")+'<input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div>';}
+      if(lock){h+='<div class="note" style="margin:5px 0 0">'+((row.city||row.beat)?(escapeHtml(row.city||"")+' \u00b7 '+escapeHtml(row.beat||"")):'<span class="hint">\u2014 (blank)</span>')+'</div>'+pjpTadaBlockHtml(dr,dt,true);}
+      else{h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;align-items:center" class="pjp-row3"><input list="dl_pjp_city" placeholder="Town/City" value="'+escAttr(row.city||"")+'" oninput="pjpSetCell(\''+dt+'\',\'city\',this.value);pjpDayCityChanged(\''+dt+'\',this.value)"><input placeholder="Beat/Market" value="'+escAttr(row.beat||"")+'" oninput="pjpSetCell(\''+dt+'\',\'beat\',this.value)"></div>'+pjpTadaBlockHtml(dr,dt,false);}
     }
     else{h+='<div class="note" style="margin:5px 0 0;color:#8a3520;font-weight:600">'+escapeHtml(ww)+'</div>';}
     h+='</div>';
   });
-  box.innerHTML=h;pjpUpdateCount();
+  var bar='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:#0f2942;color:#fff;border-radius:9px;padding:9px 12px;margin-bottom:9px"><span style="font-weight:700;font-size:12px">💰 Projected Monthly TA/DA</span><span style="font-weight:800;font-size:15px" id="pjp_ta_total">₹0</span></div><div class="hint" style="margin:-4px 0 9px">Auto-projected from Station + distance (2-wheeler rate). Edit any day\'s ₹ or Confirm — cleared field reverts to auto.</div>';
+  box.innerHTML=bar+h;pjpUpdateCount();pjpUpdateMonthTa();
 }
 function buildPjpMsg(dr,emp,hod){var L=[];L.push("*Honasa Emerging Brand \u2014 PJP Approval*");L.push("Month: "+monthName(dr.month));L.push("Employee: "+emp);L.push("To: "+hod);L.push("");var days=dr.days||{};var keys=Object.keys(days).sort();keys.forEach(function(dt){var r=days[dt]||{};var ww=r.ww||"Self Working";if(pjpIsField(ww)){if((r.city||"").trim()&&(r.beat||"").trim())L.push(pjpDateDMY(dt)+" \u2014 "+ww+" \u2014 "+r.city+" / "+r.beat);}else{L.push(pjpDateDMY(dt)+" \u2014 "+ww);}});L.push("");L.push("Approve to update master.");return L.join("\n");}
 function pjpAoa(list){var m=loadMaster();var head=["Code","Employee Name","Employee HQ","Zone","Date","Week Days","Working With","Town/City","Beat/Market","Focus Brand","Status"];var aoa=[head];list.forEach(function(dr){var e=empByAny(m,dr.code,"","","code")||{};pjpEntriesFor(dr).forEach(function(r){aoa.push([r.code,e.name||"",e.hq||"",r.zone,pjpDateDMY(r.date),r.week,r.ww||"",r.town,r.beat,r.focus,r.status||dr.status||""]);});});return aoa;}
@@ -5315,6 +5517,7 @@ function beatStores(empName){var emp=(empName||"").trim().toUpperCase();var all=
 /* ================= STOCK TAB ================= */
 var ST_DB_KEY="me_em_stock_dist_v1";   /* distributor / sub-dist / super stockist stock */
 var ST_BA_KEY="me_em_stock_ba_v1";     /* mega BA & BA store stock */
+var ST_UPDATED_KEY="me_em_stock_updated_v1"; /* ISO timestamp: when Admin/HOD last uploaded stock */
 var stStore=null;         /* selected store object */
 var stDim="sku";          /* current group-by dimension */
 var _stHits=[];           /* store search hits */
@@ -5323,6 +5526,27 @@ function stDbLoad(){try{return JSON.parse(localStorage.getItem(ST_DB_KEY)||"[]")
 function stDbSaveAll(a){localStorage.setItem(ST_DB_KEY,JSON.stringify(a||[]));}
 function stBaLoad(){try{return JSON.parse(localStorage.getItem(ST_BA_KEY)||"[]");}catch(e){return [];}}
 function stBaSaveAll(a){localStorage.setItem(ST_BA_KEY,JSON.stringify(a||[]));}
+/* Stock "last updated" timestamp — set when Admin/HOD imports, and refreshed from
+   the newest UpdatedAt pulled from the sheet so every salesman sees the same date. */
+function stUpdatedGet(){try{return localStorage.getItem(ST_UPDATED_KEY)||"";}catch(e){return "";}}
+function stUpdatedSet(iso){try{if(iso)localStorage.setItem(ST_UPDATED_KEY,iso);}catch(e){}}
+function stUpdatedLabel(){
+  var iso=stUpdatedGet();if(!iso)return "Stock not uploaded yet";
+  var d=new Date(iso);if(isNaN(d))return "Stock not uploaded yet";
+  return "Stock updated: "+ddmmyy(d.toISOString().slice(0,10))+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+}
+/* Push admin-uploaded stock to the sheet as GLOBAL reference data (full replace,
+   like master) so it reaches every salesman on their next pull. */
+function stPushStock(kind,rows,updatedAt){
+  try{
+    if(!(window.__sync&&window.__sync.replaceSheet))return;
+    if(kind==="db"){
+      window.__sync.replaceSheet("Stock_Distributor",(rows||[]).map(function(r){return {DbCode:r.dbCode||"",DbName:r.dbName||"",Brand:r.brand||"",BrandShort:r.brandShort||"",TargetBrand:r.targetBrand||"",Category:r.category||"",SubCategory:r.subCategory||"",Sku:r.sku||"",Name:r.name||"",Qty:r.qty||0,UpdatedAt:updatedAt};}));
+    }else{
+      window.__sync.replaceSheet("Stock_Store",(rows||[]).map(function(r){return {StoreCode:r.storeCode||"",StoreName:r.storeName||"",Brand:r.brand||"",BrandShort:r.brandShort||"",TargetBrand:r.targetBrand||"",Category:r.category||"",SubCategory:r.subCategory||"",Sku:r.sku||"",Name:r.name||"",Qty:r.qty||0,UpdatedAt:updatedAt};}));
+    }
+  }catch(e){}
+}
 
 /* product master lookup by SKU/EAN code -> enrich blank dimensions */
 function stProdByCode(code){
@@ -5333,8 +5557,8 @@ function stProdByCode(code){
 }
 
 function stockInit(){
-  setv("st_date-lbl","");
-  var d=document.getElementById("st-date-lbl");if(d)d.textContent=ddmmyy(todayISO());
+  // Header shows when Admin/HOD last uploaded stock (view-only tab — no editing here).
+  var d=document.getElementById("st-date-lbl");if(d)d.textContent="📅 "+stUpdatedLabel();
   var dc=document.getElementById("st_dim_card");if(dc)dc.style.display=stStore?"":"none";
   /* mark current dim chip active */
   document.querySelectorAll("#st_dims .chip").forEach(function(c){c.classList.toggle("on",c.dataset.d===stDim);});
@@ -5725,9 +5949,11 @@ function stPick(row,keys){
   return "";
 }
 
+function stStatus(msg,color){var b=document.getElementById("st_admin_status");if(b){b.innerHTML=msg;b.style.color=color||"#0369a1";}}
 function stImportDb(inp){
   var f=inp.files&&inp.files[0];if(!f)return;
   if(typeof XLSX==="undefined"){toast("Excel library not loaded — please check internet");inp.value="";return;}
+  stStatus("⏳ Reading & importing Distributor Stock… ("+f.name+")","#b45309");
   var rd=new FileReader();
   rd.onload=function(e){
     try{
@@ -5754,9 +5980,14 @@ function stImportDb(inp){
         if(rec.dbCode||rec.dbName||rec.sku)out.push(rec);
       });
       stDbSaveAll(out);
+      var updatedAt=new Date().toISOString();stUpdatedSet(updatedAt);
       toast("Distributor stock imported: "+out.length+" line(s)");
       stRenderAdmin();if(stStore)stRenderStock();
-    }catch(err){toast("Import failed — check file format");}
+      if(!out.length){stStatus("⚠️ 0 lines imported — check headers (need Distributor Code · SKU / Product · Stock Qty)","#b91c1c");}
+      else{stStatus("✅ Distributor Stock imported: <b>"+out.length+"</b> line(s) · ☁️ syncing to salesmen…","#166534");
+        stPushStock("db",out,updatedAt);
+        setTimeout(function(){stStatus("✅ Distributor Stock imported: <b>"+out.length+"</b> line(s) · synced ("+ddmmyy(todayISO())+"). Salesmen will see it on next sync.","#166534");},1500);}
+    }catch(err){stStatus("❌ Import failed — file format check karo (.xlsx with header row)","#b91c1c");toast("Import failed — check file format");}
     inp.value="";
   };
   rd.readAsArrayBuffer(f);
@@ -5765,6 +5996,7 @@ function stImportDb(inp){
 function stImportBa(inp){
   var f=inp.files&&inp.files[0];if(!f)return;
   if(typeof XLSX==="undefined"){toast("Excel library not loaded — please check internet");inp.value="";return;}
+  stStatus("⏳ Reading & importing Store Stock… ("+f.name+")","#b45309");
   var rd=new FileReader();
   rd.onload=function(e){
     try{
@@ -5791,9 +6023,14 @@ function stImportBa(inp){
         if(rec.storeCode||rec.storeName||rec.sku)out.push(rec);
       });
       stBaSaveAll(out);
+      var updatedAt=new Date().toISOString();stUpdatedSet(updatedAt);
       toast("Store stock imported: "+out.length+" line(s)");
       stRenderAdmin();if(stStore)stRenderStock();
-    }catch(err){toast("Import failed — check file format");}
+      if(!out.length){stStatus("⚠️ 0 lines imported — check headers (need Store Code · SKU / Product · Stock Qty)","#b91c1c");}
+      else{stStatus("✅ Store Stock imported: <b>"+out.length+"</b> line(s) · ☁️ syncing to salesmen…","#166534");
+        stPushStock("ba",out,updatedAt);
+        setTimeout(function(){stStatus("✅ Store Stock imported: <b>"+out.length+"</b> line(s) · synced ("+ddmmyy(todayISO())+"). Salesmen will see it on next sync.","#166534");},1500);}
+    }catch(err){stStatus("❌ Import failed — file format check karo (.xlsx with header row)","#b91c1c");toast("Import failed — check file format");}
     inp.value="";
   };
   rd.readAsArrayBuffer(f);
@@ -5818,9 +6055,11 @@ function stTemplateBa(){
 }
 
 function stRenderAdmin(){
-  var box=document.getElementById("st_admin_out");if(!box)return;
   var nd=stDbLoad().length,nb=stBaLoad().length;
-  box.innerHTML="Loaded: 🏭 Distributor "+nd+" line(s) · 🏪 Store "+nb+" line(s)";
+  var box=document.getElementById("st_admin_out");
+  if(box)box.innerHTML="Loaded: 🏭 Distributor "+nd+" line(s) · 🏪 Store "+nb+" line(s)";
+  var st=document.getElementById("st_admin_status");
+  if(st)st.innerHTML="Currently loaded → 🏭 Distributor <b>"+nd+"</b> line(s) · 🏪 Store <b>"+nb+"</b> line(s) · 📅 "+stUpdatedLabel();
 }
 
 
@@ -7527,7 +7766,14 @@ function recordPlanDeviation(r){
   devSaveAll(arr);
   try{if(window.__sync&&window.__sync.pushDeviation)window.__sync.pushDeviation(rec);}catch(e){}
 }
-function apprIsHod(){try{return fullAccess()||getRole()==="admin";}catch(e){return false;}}
+// TRUE identity from the login session's Rights — this is the source of truth for
+// DATA VISIBILITY. The launch "bypass" only relaxes workflow chain-gating; it must
+// NOT elevate a salesman's visibility to admin (else Himanshu would see everyone's
+// data + the HOD-only Open-window card). So role/visibility checks read rights here,
+// NOT getRole()/window.__BYPASS (which bypass forces to admin).
+function sessionIsAdminHod(){try{var s=JSON.parse(localStorage.getItem("me_em_session")||"null");if(!s)return false;var r=String(s.rights||"").toLowerCase();return r.indexOf("admin")>=0||r.indexOf("hod")>=0;}catch(e){return false;}}
+window.sessionIsAdminHod=sessionIsAdminHod;
+function apprIsHod(){return sessionIsAdminHod();}
 function apprMyCode(){try{var r=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};return r.on?r.code:"";}catch(e){return "";}}
 // Pending items = submitted PJPs awaiting HOD + pending deviations (scoped to the viewer).
 function apprPjpPending(){var all=pjpLoad();var mine=apprMyCode();return Object.keys(all).map(function(k){return {key:k,dr:all[k]};}).filter(function(o){var dr=o.dr;if(!dr)return false;if(mine&&String(dr.code).toUpperCase()!==String(mine).toUpperCase())return false;return dr.status==="Pending"||dr.sentToHod;});}
@@ -7766,12 +8012,10 @@ function dlFillEmpDropdown(){
 // Detect if current session is a non-admin/non-HOD Employee who should see only own data
 function isEmployeeSelfOnly(){
   try{
-    // Bypass mode ON with scope matches → treat as admin (no restriction)
-    if(window.__bypass&&window.__bypass.isActive){
-      var s0=null;try{var sx=localStorage.getItem("me_em_session");if(sx)s0=JSON.parse(sx);}catch(e){}
-      var code0=s0?s0.code:"";
-      if(window.__bypass.isActive(code0))return {on:false,code:"",name:"",email:""};
-    }
+    // NOTE: bypass no longer disables self-only. Bypass exists to relax WORKFLOW
+    // chain-gating (plan-first, mandatory photos) so employees can backfill — it must
+    // NOT let a salesman see other salesmen's data. Visibility is decided purely by
+    // the login Rights below (Admin/HOD → all; Employee → own only, even under bypass).
     var sess=localStorage.getItem("me_em_session");if(!sess)return {on:false,code:"",name:"",email:""};
     var s=JSON.parse(sess);if(!s)return {on:false,code:"",name:"",email:""};
     var rights=String(s.rights||"").toLowerCase();
@@ -10376,6 +10620,22 @@ function tadaFillClaimDesigDropdown(){
     writeLocalMaster(m);
   }
 
+  // ─── Stock MERGE-DOWN: global reference data (admin uploads → all salesmen see) ──
+  // Stock is NOT per-employee — it is returned to everyone (like master), full replace.
+  // Uses literal localStorage keys (this IIFE is a separate scope from the app globals).
+  function mergeStockFromRemote(remote){
+    try{
+      if(remote.Stock_Distributor&&remote.Stock_Distributor.map){
+        localStorage.setItem("me_em_stock_dist_v1",JSON.stringify(remote.Stock_Distributor.map(function(r){return {dbCode:String(r.DbCode||""),dbName:String(r.DbName||""),brand:r.Brand||"",brandShort:r.BrandShort||"",targetBrand:r.TargetBrand||"",category:r.Category||"",subCategory:r.SubCategory||"",sku:String(r.Sku||""),name:r.Name||String(r.Sku||""),qty:Number(r.Qty)||0};})));
+      }
+      if(remote.Stock_Store&&remote.Stock_Store.map){
+        localStorage.setItem("me_em_stock_ba_v1",JSON.stringify(remote.Stock_Store.map(function(r){return {storeCode:String(r.StoreCode||""),storeName:String(r.StoreName||""),brand:r.Brand||"",brandShort:r.BrandShort||"",targetBrand:r.TargetBrand||"",category:r.Category||"",subCategory:r.SubCategory||"",sku:String(r.Sku||""),name:r.Name||String(r.Sku||""),qty:Number(r.Qty)||0};})));
+      }
+      var upd="";(remote.Stock_Distributor||[]).concat(remote.Stock_Store||[]).forEach(function(r){var u=String(r.UpdatedAt||"");if(u>upd)upd=u;});
+      if(upd)localStorage.setItem("me_em_stock_updated_v1",upd);
+    }catch(e){}
+  }
+
   // ─── Transactional PUSH: send this device's TODAY records to the sheet ───────
   // Called at "store complete" (POSM → Next Store / Proceed to EOD). Reads the REAL
   // localStorage keys (the old per-save hooks read wrong keys → never fired) and
@@ -10486,11 +10746,16 @@ function tadaFillClaimDesigDropdown(){
       if(res.LoginConfig)mergeLoginConfig(res.LoginConfig);
       // Apply master
       mergeMasterFromRemote(res);
+      // Apply GLOBAL stock (admin-uploaded Distributor/Store stock → visible to all salesmen)
+      try{mergeStockFromRemote(res);}catch(e){}
+      try{var sv=document.getElementById("v-stock");if(sv&&sv.classList.contains("active")&&typeof stockInit==="function"){stockInit();if(typeof stStore!=="undefined"&&stStore&&typeof stRenderStock==="function")stRenderStock();}}catch(e){}
       // Apply transactional data (SecOrders / POSM / NewStores) — cross-device visibility
       try{mergeTxnFromRemote(res);}catch(e){}
       // Apply approvals (PJP drafts + deviations) — rep↔HOD cross-device
       try{mergeApprovalsFromRemote(res);}catch(e){}
       try{if(typeof updateApprBadge==="function")updateApprBadge();var aw=document.getElementById("sum_approvals_wrap");if(aw&&aw.style.display!=="none"&&typeof renderApprovals==="function")renderApprovals();}catch(e){}
+      // If a plan-change approval came back (HOD approved/rejected), re-evaluate the Plan gate so it unlocks.
+      try{var pv=document.getElementById("v-plan");if(pv&&pv.classList.contains("active")&&typeof planGate==="function")planGate();}catch(e){}
       // Store role/code for filters
       try{
         localStorage.setItem("me_em_sync_role",res.role||"Employee");
