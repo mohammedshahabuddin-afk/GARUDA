@@ -602,6 +602,20 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
 <!-- Session badge (top-right, sticky) -->
 <div id="session_badge" style="display:none;position:fixed;top:8px;right:8px;z-index:100;background:rgba(15,41,66,0.95);color:white;padding:6px 12px;border-radius:20px;font-size:11px;box-shadow:0 4px 12px rgba(0,0,0,0.2)"></div>
 
+<!-- Distributor picker (New Store) — full-screen modal, topmost layer, always fully visible -->
+<div id="ns_db_modal" onclick="if(event.target===this)nsDbClose()" style="display:none;position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.55);align-items:flex-end;justify-content:center">
+  <div style="background:#fff;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;border-radius:16px 16px 0 0;box-shadow:0 -6px 30px rgba(0,0,0,.3)">
+    <div style="padding:14px 16px 10px;border-bottom:1px solid #eef1f0;display:flex;align-items:center;gap:10px">
+      <div style="font-weight:800;font-size:15px;color:#0E4F3B;flex:1">🔗 Select Distributor</div>
+      <button type="button" class="btn btn-ghost small" onclick="nsDbClose()" style="min-width:auto">✕ Close</button>
+    </div>
+    <div style="padding:12px 16px 8px">
+      <input type="text" id="ns_db_search" placeholder="🔍 Search code or name…" oninput="renderNsDbList()" autocomplete="off" style="width:100%;box-sizing:border-box">
+    </div>
+    <div id="ns_db_list" style="flex:1;overflow:auto;padding:0 8px 16px"></div>
+  </div>
+</div>
+
 <style>
 /* Login Gate — 3-column layout with transparent images (no borders) */
 @media (min-width:900px){
@@ -909,9 +923,8 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <div class="card">
         <h2><span class="dot"></span>Store Details</h2>
         <div class="note" style="margin:0 0 6px">🔗 Distributor (DB) — jinke through ye store maal purchase karega</div>
-        <label class="hint" style="margin-top:0">Distributor — tap to select (Code / Name)</label>
-        <input type="text" id="ns_db_search" placeholder="🔍 Search code or name…" oninput="renderNsDbList()" autocomplete="off">
-        <div id="ns_db_list" style="max-height:230px;overflow:auto;border:1.5px solid var(--line);border-radius:10px;margin-top:6px;background:#fff"></div>
+        <label class="hint" style="margin-top:0">Distributor</label>
+        <button type="button" id="ns_db_btn" class="btn btn-ghost" style="width:100%;text-align:left;justify-content:flex-start;font-weight:600" onclick="nsDbOpen()">Select distributor… ▾</button>
         <div class="note" id="ns_db_picked" style="margin:6px 0 0;display:none"></div>
         <input type="hidden" id="ns_dbcode"><input type="hidden" id="ns_dbname">
         <label>1 · Store Type</label>
@@ -3044,6 +3057,8 @@ function resetNewStore(){
   ["ns_type","ns_cat","ns_interest","ns_class","ns_beauty"].forEach(function(id){var el=document.getElementById(id);if(el)el.selectedIndex=0;});
   var dbs=document.getElementById("ns_db_search");if(dbs)dbs.value="";
   var dbp=document.getElementById("ns_db_picked");if(dbp){dbp.style.display="none";dbp.innerHTML="";}
+  try{nsDbClose();}catch(e){}
+  try{nsDbSyncBtn();}catch(e){}
   try{renderNsDbList();}catch(e){}
   nsPhotos={front:"",inside:""};
   ["front","inside"].forEach(function(w){var img=document.getElementById("ns_"+w+"_img"),ph=document.getElementById("ns_"+w+"_ph");if(img){img.src="";img.style.display="none";}if(ph)ph.style.display="";});
@@ -3121,7 +3136,12 @@ function empDbList(){
 // overlay — so option text is always visible on every mobile browser). Optional search filters
 // by code or name. Tapping a row stores code+name into hidden ns_dbcode/ns_dbname (saveNewStore
 // reads those). Kept as fillDistDatalists for its existing callers (fieldRefresh, fStoreMode).
-function fillDistDatalists(){renderNsDbList();}
+function fillDistDatalists(){nsDbSyncBtn();try{renderNsDbList();}catch(e){}}
+// Reflect the current pick on the button that opens the picker.
+function nsDbSyncBtn(){var btn=document.getElementById("ns_db_btn");if(!btn)return;var code=elv("ns_dbcode"),nm=elv("ns_dbname");btn.textContent=(code||nm)?((nm||"—")+(code?(" · "+code):"")):"Select distributor… ▾";}
+// Open / close the full-screen distributor picker (topmost layer).
+function nsDbOpen(){var m=document.getElementById("ns_db_modal");if(!m)return;var s=document.getElementById("ns_db_search");if(s)s.value="";renderNsDbList();m.style.display="flex";if(s)setTimeout(function(){try{s.focus();}catch(e){}},60);}
+function nsDbClose(){var m=document.getElementById("ns_db_modal");if(m)m.style.display="none";}
 function renderNsDbList(){
   var box=document.getElementById("ns_db_list");if(!box)return;
   var q=(elv("ns_db_search")||"").trim().toLowerCase();
@@ -3149,7 +3169,8 @@ function nsDbPickRow(el){
   setv("ns_dbcode",code);setv("ns_dbname",nm);
   var lbl=document.getElementById("ns_db_picked");
   if(lbl){lbl.style.display="";lbl.innerHTML="✅ Selected: <b>"+escapeHtml(nm||"—")+"</b>"+(code?(" · "+escapeHtml(code)):"");}
-  renderNsDbList();
+  nsDbSyncBtn();
+  nsDbClose();
 }
 // Auto-sync: fill code from name / name from code, resolving within the salesman's mapped
 // distributors first, then falling back to the full master so any valid entry still pairs up.
