@@ -3085,7 +3085,7 @@ function nsSuccessHtml(r){
 function escAttr(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
 function distList(){var m=loadMaster();return (m&&m.distributors)?m.distributors:[];}
 // Distributor code↔name resolvers (fill from master so reps don't type both).
-function distName(code){var c=String(code||"").trim().toUpperCase();if(!c)return "";var d=distList().filter(function(z){return String(z.code||"").toUpperCase()===c;})[0];if(d&&d.name)return d.name;var s=storeList().filter(function(z){return String(z.dbCode||"").toUpperCase()===c&&(z.dbName||"").trim();})[0];return s?(s.dbName||""):"";}
+function distName(code){var c=String(code==null?"":code).trim().toUpperCase();if(!c)return "";var d=distList().filter(function(z){return String(z.code==null?"":z.code).toUpperCase()===c;})[0];if(d&&d.name)return d.name;var s=storeList().filter(function(z){return String(z.dbCode==null?"":z.dbCode).toUpperCase()===c&&String(z.dbName==null?"":z.dbName).trim();})[0];return s?String(s.dbName==null?"":s.dbName):"";}
 function distCode(name){var n=String(name||"").trim().toLowerCase();if(!n)return "";var d=distList().filter(function(z){return String(z.name||"").toLowerCase()===n;})[0];return d?(d.code||""):"";}
 // Backfill a store-fill object's distributor pair when master gives us one side only.
 function resolveDbPair(F){if(F.os_d_dbcode&&!F.os_d_dbname){var nm=distName(F.os_d_dbcode);if(nm)F.os_d_dbname=nm;}else if(!F.os_d_dbcode&&F.os_d_dbname){var cd=distCode(F.os_d_dbname);if(cd)F.os_d_dbcode=cd;}return F;}
@@ -3104,7 +3104,7 @@ function empMappedStores(){
 function _dbsFromStores(stores){
   var seen={},out=[];
   stores.forEach(function(s){
-    var c=(s.dbCode||"").trim(),n=(s.dbName||"").trim();
+    var c=String(s.dbCode==null?"":s.dbCode).trim(),n=String(s.dbName==null?"":s.dbName).trim();
     if(!c&&!n)return;
     var key=(c||n).toLowerCase();
     if(seen[key])return;seen[key]=1;
