@@ -910,8 +910,8 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
         <h2><span class="dot"></span>Store Details</h2>
         <div class="note" style="margin:0 0 6px">🔗 Distributor (DB) — jinke through ye store maal purchase karega</div>
         <div class="row2">
-          <div><label class="hint" style="margin-top:0">Distributor Code</label><input type="text" id="ns_dbcode" list="dl_ns_dbcode" onchange="nsDbFromCode()" placeholder="Search DB code" autocomplete="off"><datalist id="dl_ns_dbcode"></datalist></div>
-          <div><label class="hint" style="margin-top:0">Distributor Name</label><input type="text" id="ns_dbname" list="dl_ns_dbname" onchange="nsDbFromName()" placeholder="Search DB name" autocomplete="off"><datalist id="dl_ns_dbname"></datalist></div>
+          <div><label class="hint" style="margin-top:0">Distributor Code</label><select id="ns_dbcode" onchange="nsDbFromCode()"><option value="">Select DB code…</option></select></div>
+          <div><label class="hint" style="margin-top:0">Distributor Name</label><select id="ns_dbname" onchange="nsDbFromName()"><option value="">Select DB name…</option></select></div>
         </div>
         <label>1 · Store Type</label>
         <select id="ns_type"><option value="">Select…</option><option>MEGA BA</option><option>BA</option></select>
@@ -992,19 +992,23 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       </div>
 
       <div class="card">
-        <h2><span class="dot"></span>Live Photos <span class="hint">(camera only — no gallery)</span></h2>
+        <h2><span class="dot"></span>Live Photos <span class="hint" id="ns_photo_hint">(camera only — no gallery)</span></h2>
         <div class="row2">
           <div style="text-align:center">
             <label class="hint" style="margin-top:0">26 · Outlet Front View</label>
             <img id="ns_front_img" style="display:none;width:100%;border-radius:10px;margin:6px 0">
             <div id="ns_front_ph" style="background:#f0f3f7;border:1px dashed #c4cfda;border-radius:10px;padding:18px 8px;color:#8a96a3;font-size:12px;margin:6px 0">No photo yet</div>
             <button type="button" class="btn btn-ghost small" onclick="openCam('front')">📷 Open Camera</button>
+            <button type="button" class="btn btn-ghost small ns-gal-btn" id="ns_front_gal_btn" style="display:none;margin-top:6px" onclick="nsPickGallery('front')">🖼️ Gallery</button>
+            <input type="file" accept="image/*" id="ns_front_file" style="display:none" onchange="nsGalleryFile('front',this)">
           </div>
           <div style="text-align:center">
             <label class="hint" style="margin-top:0">27 · Inside Display</label>
             <img id="ns_inside_img" style="display:none;width:100%;border-radius:10px;margin:6px 0">
             <div id="ns_inside_ph" style="background:#f0f3f7;border:1px dashed #c4cfda;border-radius:10px;padding:18px 8px;color:#8a96a3;font-size:12px;margin:6px 0">No photo yet</div>
             <button type="button" class="btn btn-ghost small" onclick="openCam('inside')">📷 Open Camera</button>
+            <button type="button" class="btn btn-ghost small ns-gal-btn" id="ns_inside_gal_btn" style="display:none;margin-top:6px" onclick="nsPickGallery('inside')">🖼️ Gallery</button>
+            <input type="file" accept="image/*" id="ns_inside_file" style="display:none" onchange="nsGalleryFile('inside',this)">
           </div>
         </div>
       </div>
@@ -2215,7 +2219,7 @@ function uploadMaster(ev){
       sheetRows(wb,"Phasing BA TGT").forEach(function(r){var st=Sv(r["Target Status"]);if(Sv(r.Code)&&VS[st])m.phasing.push({code:Sv(r.Code),status:st,month:Sv(r.Month),total:num(r["Total TGT"]),TDC:num(r.TDC),TDC_FW:num(r["TDC-FW"]),TDC_SERUM:num(r["TDC-SERUM"]),BB:num(r.BB),AQ:num(r.AQ),DRS:num(r.DRS),CC:num(r.CC)});});
       sheetRows(wb,"Products").forEach(function(r){var st=Sv(r["MSL Status"]);if(Sv(r["Product Code"])&&/^MSL$/i.test(st))m.msl.push({brand:Sv(r["Brand Short"])||Sv(r["Target Brand"]),pcode:Sv(r["Product Code"]),product:Sv(r["Product Name"])||Sv(r.Product),cat:Sv(r.Category),subcat:Sv(r["Sub Category"]),mrp:Sv(r.MRP)});});
       sheetRows(wb,"Distributors").forEach(function(r){var c=Sv(r["Distributor Code"])||Sv(r.Code);if(c)m.distributors.push({code:c,name:Sv(r["Distributor Name"])||Sv(r.Name)});});
-      sheetRows(wb,"Stores").forEach(function(r){var cid=Sv(r["Client ID"]),sn=Sv(r["Store Name"]);if(cid||sn)m.stores.push({clientId:cid,companyCode:Sv(r["Actual Company Code"])||Sv(r["Company Code"]),storeName:sn,city:Sv(r["City Name"])||Sv(r.City),state:Sv(r["State Name"])||Sv(r.State),status:Sv(r.Status),dbCode:Sv(r["Distributor Code"]),dbName:Sv(r["Distributor Name"]),storeType:Sv(r["Store Type"]),emAsm:Sv(r["EM ASM NAME"]),emAsmHq:Sv(r["EM ASM HQ"])});});
+      sheetRows(wb,"Stores").forEach(function(r){var cid=Sv(r["Client ID"])||Sv(r.ClientId),sn=Sv(r["Store Name"])||Sv(r.StoreName);if(cid||sn)m.stores.push({clientId:cid,companyCode:Sv(r["Actual Company Code"])||Sv(r["Company Code"])||Sv(r.CompanyCode),storeName:sn,city:Sv(r["City Name"])||Sv(r.City),state:Sv(r["State Name"])||Sv(r.State),status:Sv(r.Status),dbCode:Sv(r["Distributor Code"])||Sv(r.DbCode),dbName:Sv(r["Distributor Name"])||Sv(r.DbName),storeType:Sv(r["Store Type"])||Sv(r.StoreType),emAsm:Sv(r["EM ASM NAME"])||Sv(r.EmAsm),emAsmHq:Sv(r["EM ASM HQ"])||Sv(r.EmAsmHq)});});
       sheetRows(wb,"Products").forEach(function(r){var pc=Sv(r["Product Code"]),pn=Sv(r["Product Name"])||Sv(r.Product);if(pc||pn)m.products.push({targetBrand:Sv(r["Target Brand"]),code:pc,name:pn,brand:Sv(r["Brand Name"])||Sv(r.Brand),brandShort:Sv(r["Brand Short"]),category:Sv(r.Category),subCategory:Sv(r["Sub Category"]),range:Sv(r.Range),uom:Sv(r.UOM)||Sv(r.UMO),mrp:Sv(r.MRP),mslStatus:Sv(r["MSL Status"]),lifecycle:Sv(r.Lifecycle)});});
       if(!m.employees.length){if(_mstat){_mstat.textContent="\u26a0\ufe0f No Employees rows found \u2014 check the 'Employees' sheet & headers.";_mstat.style.color="#b91c1c";}toast("No Employees rows found");return;}
       saveMaster(m);applyMaster();fillEmpSelects();planRefresh();
@@ -2946,7 +2950,7 @@ function fStoreMode(mode,el){
   var isNew=(mode==="new");
   document.getElementById("f_new_wrap").style.display=isNew?"":"none";
   document.getElementById("f_old_wrap").style.display=isNew?"none":"";
-  if(isNew){try{fillDistDatalists();}catch(e){}}
+  if(isNew){try{fillDistDatalists();}catch(e){}try{nsUpdatePhotoMode();}catch(e){}}
   window._secSource=(mode==="tel")?"Telephonic Call":"Store Visit";
   var lbl=document.getElementById("os_source_lbl");if(lbl)lbl.innerHTML=(mode==="tel")?"\ud83d\udcde Telephonic Call \u2014 order phone pe liya":"\ud83c\udfea MEGA BA &amp; BA Store \u2014 store visit";
   if(!isNew){osFillStores();osFillProdFilters();osFillProdList();renderOsLines();}
@@ -3086,12 +3090,10 @@ function empMappedStores(){
   var nU=_dbNorm(name),cU=_dbNorm(empCodeOf(name));
   return storeList().filter(function(s){var a=_dbNorm(s.emAsm);return a&&(a===nU||(cU&&a===cU));});
 }
-// Distributors mapped to the salesman = the DISTINCT distributors of their mapped stores.
-// Falls back to the full distributor list only when the salesman has no mapped stores (or the
-// cached master has no EM ASM column), so the New Store form is never blocked/empty.
-function empDbList(){
+// Collapse a list of store rows to DISTINCT {code,name} distributor pairs (sorted by name).
+function _dbsFromStores(stores){
   var seen={},out=[];
-  empMappedStores().forEach(function(s){
+  stores.forEach(function(s){
     var c=(s.dbCode||"").trim(),n=(s.dbName||"").trim();
     if(!c&&!n)return;
     var key=(c||n).toLowerCase();
@@ -3100,12 +3102,25 @@ function empDbList(){
     out.push({code:c||distCode(n),name:n||distName(c)});
   });
   out.sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
-  return out.length?out:distList();
+  return out;
 }
+// Distributors mapped to the salesman = DISTINCT distributors of their EM-ASM-mapped stores.
+// Fallbacks (so the dropdown is NEVER empty): Distributors master → distributors of all stores.
+function empDbList(){
+  var mapped=_dbsFromStores(empMappedStores());
+  if(mapped.length)return mapped;
+  var all=distList();
+  if(all&&all.length)return all.slice().sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
+  return _dbsFromStores(storeList());
+}
+// Populate the two Distributor <select> dropdowns in the New Store form from the salesman's
+// mapped distributors. Code dropdown shows "CODE — Name"; Name dropdown shows "Name [CODE]".
+// (Name kept as fillDistDatalists for its existing callers.)
 function fillDistDatalists(){
-  var dl=empDbList();var dc=document.getElementById("dl_ns_dbcode"),dn=document.getElementById("dl_ns_dbname");
-  if(dc){dc.innerHTML="";dl.forEach(function(z){if(!z.code&&!z.name)return;var o=document.createElement("option");o.value=(z.code||"");o.textContent=(z.name||"");dc.appendChild(o);});}
-  if(dn){dn.innerHTML="";dl.forEach(function(z){if(!z.code&&!z.name)return;var o=document.createElement("option");o.value=(z.name||"");o.textContent=(z.code||"");dn.appendChild(o);});}
+  var dl=empDbList();
+  var dc=document.getElementById("ns_dbcode"),dn=document.getElementById("ns_dbname");
+  if(dc){var cur=dc.value;dc.innerHTML='<option value="">Select DB code…</option>';dl.forEach(function(z){if(!z.code)return;var o=document.createElement("option");o.value=z.code;o.textContent=z.code+(z.name?(" — "+z.name):"");dc.appendChild(o);});dc.value=cur;}
+  if(dn){var cur2=dn.value;dn.innerHTML='<option value="">Select DB name…</option>';dl.forEach(function(z){if(!z.name)return;var o=document.createElement("option");o.value=z.name;o.textContent=z.name+(z.code?(" ["+z.code+"]"):"");dn.appendChild(o);});dn.value=cur2;}
 }
 // Auto-sync: fill code from name / name from code, resolving within the salesman's mapped
 // distributors first, then falling back to the full master so any valid entry still pairs up.
@@ -4583,6 +4598,36 @@ function osMode(mode,el){
 }
 /* ===== end 3-step ===== */
 
+/* New Store gallery upload — only enabled under Bypass / full access (else camera-only).
+   Show/hide the Gallery buttons + update the hint whenever the New Store form opens. */
+function nsUpdatePhotoMode(){
+  var on=false;try{on=fullAccess();}catch(e){on=!!window.__BYPASS;}
+  ["ns_front_gal_btn","ns_inside_gal_btn"].forEach(function(id){var b=document.getElementById(id);if(b)b.style.display=on?"":"none";});
+  var h=document.getElementById("ns_photo_hint");if(h)h.textContent=on?"(camera or gallery — Bypass on)":"(camera only — no gallery)";
+}
+function nsPickGallery(which){var inp=document.getElementById("ns_"+which+"_file");if(inp){inp.value="";inp.click();}}
+// Read a picked image, downscale to ~1280px JPEG (same format/size profile as camera capture),
+// store it in nsPhotos so it flows through save + the photo→Drive pipeline unchanged.
+function nsGalleryFile(which,inp){
+  var f=inp&&inp.files&&inp.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var mx=1280,w=img.width,h=img.height;
+      if(w>mx||h>mx){var sc=Math.min(mx/w,mx/h);w=Math.round(w*sc);h=Math.round(h*sc);}
+      var cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);
+      var d=cv.toDataURL("image/jpeg",0.8);
+      nsPhotos[which]=d;
+      var i=document.getElementById("ns_"+which+"_img"),ph=document.getElementById("ns_"+which+"_ph");
+      if(i){i.src=d;i.style.display="";}if(ph)ph.style.display="none";
+      toast("🖼️ Photo gallery se add ho gaya");
+    };
+    img.onerror=function(){toast("Photo load nahi hua");};
+    img.src=e.target.result;
+  };
+  r.readAsDataURL(f);
+}
 
 /* ===== ORDER FULFILMENT tab (Field=entry -> Fulfil=review+photos+submit+tracking) ===== */
 var camMode="ns",_ffPending=null,_editSoId=null,_editPhotos=null,_ffLastSaved=null;
@@ -10504,6 +10549,7 @@ function tadaFillClaimDesigDropdown(){
         try{window.__BYPASS=true;}catch(e){}
         renderBypassBanner(true,cfg);
         try{if(typeof updateNavLocks==="function")updateNavLocks();}catch(e){}
+        try{if(typeof nsUpdatePhotoMode==="function")nsUpdatePhotoMode();}catch(e){}
         return true;
       }
     }
@@ -10519,6 +10565,7 @@ function tadaFillClaimDesigDropdown(){
     try{window.__BYPASS=false;}catch(e){}
     renderBypassBanner(false,cfg);
     try{if(typeof updateNavLocks==="function")updateNavLocks();}catch(e){}
+    try{if(typeof nsUpdatePhotoMode==="function")nsUpdatePhotoMode();}catch(e){}
     return false;
   }
 
