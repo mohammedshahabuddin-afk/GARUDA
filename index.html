@@ -1126,8 +1126,9 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <div class="note" style="margin:0 0 10px;color:#5a4008">Ye orders <b>"Order in Process"</b> me hain — jab tak Billing Done / No Order / Cancel Order set nahi karoge, tab tak open rahenge. Har order ke saamne dropdown se status update karo.</div>
       <div id="pending_orders_list"></div>
     </div>
-    <div id="ff_current"></div>
     <div class="card"><h2><span class="dot"></span>📋 Orders — store-wise (all) <span class="hint">— Edit karke quantity change karo, ya naya product add karo</span></h2><div id="ff_list"></div></div>
+    <!-- Current-store action card (Save / Proceed to POSM) — moved to BOTTOM of the SEC tab -->
+    <div id="ff_current"></div>
     <div id="ff_out"></div>
   </section>
 
@@ -1207,10 +1208,10 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       </div>
     </div>
 
-    <!-- ============ Store-complete action bar (both sub-tabs) ============ -->
-    <div id="posm_action_bar" class="card" style="display:none;border-left:4px solid #2f9e57">
-      <div class="note" style="margin:0 0 10px">✅ Is store ka POSM save ho gaya. Ab agla store karo, ya din khatam karke EOD par jao. <span class="hint">(Store complete hone par data sheet par sync hoga)</span></div>
-      <div class="row2"><button class="btn btn-ghost" onclick="posmNextStore()">➡️ Next Store (Field)</button><button class="btn btn-navy" onclick="posmProceedEod()">🌙 Save &amp; Proceed to EOD</button></div>
+    <!-- ============ End-of-store action bar (bottom of POSM, both sub-tabs) ============ -->
+    <div id="posm_action_bar" class="card" style="border-left:4px solid #2f9e57">
+      <div class="note" style="margin:0 0 10px">Store ka POSM save karo. Phir <b>Next Store</b> se agle store ka visit shuru karo, ya poora din khatam karke <b>Close Day</b> se final submit karo. <span class="hint">(Data sheet par sync hota hai; Close Day ke baad koi edit nahi.)</span></div>
+      <div class="row2"><button class="btn btn-ghost" onclick="posmNextStore()">➡️ Next Store (Field)</button><button class="btn btn-navy" style="background:#0f2942" onclick="posmCloseDay()">🏁 Close Day (Final Submit)</button></div>
     </div>
   </section>
 
@@ -4715,7 +4716,7 @@ function renderFfList(){
     h+='</div>';
   });
   h+='<div style="display:flex;justify-content:space-between;padding:8px 12px;background:#0f2e1d;color:#fff;border-radius:8px;font-weight:700;font-size:13px;margin:4px 0 10px"><span>'+l.length+' visits</span><span>NSV \u20b9'+tot.toFixed(4)+' L</span></div>';
-  if(!fin)h+='<button class="btn btn-navy" onclick="ffCloseDay()">\ud83c\udfc1 Close Day (Final Submit)</button>';
+  // "Close Day (Final Submit)" moved to the POSM tab (end of the store loop). Not here anymore.
   box.innerHTML=h;
 }
 /* \u2500\u2500 Inline SEC order editor (edit later if a customer changes/cancels/adds) \u2500\u2500 */
@@ -6395,6 +6396,8 @@ function posmInit(){
   renderPdList();renderPiList();renderPiPhotos();
   if(!elv("po_date"))setv("po_date",elv("f_date")||todayISO());
   renderPoContext();renderSaList();renderReqContext();renderReqList();
+  // Bottom action bar (Next Store / Close Day) is always shown in POSM, hidden once the day is finalized.
+  var ab=document.getElementById("posm_action_bar");if(ab)ab.style.display=(typeof ffIsFinal==="function"&&ffIsFinal())?"none":"";
 }
 function poSubTab(name,el){
   ["audit","req"].forEach(function(s){var d=document.getElementById("po_sec_"+s);if(d)d.style.display=(s===name)?"":"none";});
@@ -6654,6 +6657,19 @@ function posmHideActionBar(){var b=document.getElementById("posm_action_bar");if
 function posmSyncStoreDone(){try{if(window.__sync&&window.__sync.pushTxnNow){window.__sync.pushTxnNow();}else if(window.__syncPhotosNow){window.__syncPhotosNow();}}catch(e){}}
 function posmNextStore(){posmHideActionBar();posmSyncStoreDone();window._lastPosmVisit=null;var fb=document.querySelector('.nav button[data-v="field"]');go("field",fb);toast("➡️ Agla store select karo");}
 function posmProceedEod(){posmHideActionBar();posmSyncStoreDone();window._lastPosmVisit=null;var eb=document.querySelector('.nav button[data-v="eod"]');if(eb)go("eod",eb);}
+/* Close Day from POSM (end of the store loop): sync ALL of today's activities, then finalize
+   + lock the day. After this, SEC orders are read-only (ffIsFinal) and the action bar hides.
+   ffCloseDay() runs its own confirm + guards (no visits / pending order) and sets the final flag. */
+function posmCloseDay(){
+  try{posmSyncStoreDone();}catch(e){}
+  if(typeof ffCloseDay==="function")ffCloseDay();
+  try{
+    if(typeof ffIsFinal==="function"&&ffIsFinal()){
+      posmHideActionBar();
+      toast("🏁 Day submitted — sab activities lock ho gayi, ab koi edit nahi.");
+    }
+  }catch(e){}
+}
 
 
 /* ---- DISPATCH: Company -> Distributor/Sub/Super ---- */
