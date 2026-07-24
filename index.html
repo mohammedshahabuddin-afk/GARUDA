@@ -4896,10 +4896,9 @@ function renderFfCurrent(){
   var box=document.getElementById("ff_current");if(!box)return;
   if(ffIsFinal()){box.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">\u2705 <b>Day finalized</b> \u2014 sab orders lock. Naye din fresh start.</div></div>';return;}
   var l=soLoad();var tot=l.reduce(function(a,r){return a+(r.totNsv||0);},0);
-  var canPosm=!!window._lastPosmVisit;
   var h='<div class="card" style="border-left:4px solid #C8A24B"><div class="note" style="margin:0">\ud83d\udccd Order <b>Field tab</b> me punch hota hai. Yahaan aaj ke order <b>modify</b> (units/value/status/cancel), <b>Save</b> aur <b>POSM</b> par jao.'+(l.length?(' \u2014 abhi tak <b>'+l.length+'</b> visits \u00b7 NSV \u20b9'+tot.toFixed(4)+' L'):'')+'</div>';
-  h+='<div class="row2" style="margin-top:10px"><button class="btn btn-ghost" onclick="ffSaveLocal()">\ud83d\udcbe Save</button><button class="btn btn-navy" onclick="ffProceedToPosm()"'+(canPosm?'':' disabled')+'>Proceed to POSM \u2192</button></div>';
-  if(!canPosm)h+='<div class="hint" style="margin-top:6px">Pehle Field tab me is store ka order save karo \u2014 phir POSM khulega.</div>';
+  h+='<div class="row2" style="margin-top:10px"><button class="btn btn-ghost" onclick="ffSaveLocal()">\ud83d\udcbe Save</button><button class="btn btn-navy" onclick="ffProceedToPosm()">Proceed to POSM \u2192</button></div>';
+  h+='<div class="hint" style="margin-top:6px">Click karte hi is store ka order <b>auto-save</b> ho ke POSM khul jayega.</div>';
   h+='</div>';
   box.innerHTML=h;
 }
@@ -4907,7 +4906,26 @@ function renderFfCurrent(){
 // this confirms + refreshes the list). No sheet push here \u2014 sync fires at store-complete.
 function ffSaveLocal(){try{soSave(soLoad());}catch(e){}try{renderFfList();}catch(e){}toast("\ud83d\udcbe Order saved locally");}
 // SEC tab \u2192 POSM for the store just punched in Field.
-function ffProceedToPosm(){if(!window._lastPosmVisit){toast("Pehle Field me order save karo");return;}posmStartFromVisit();}
+function ffProceedToPosm(){
+  if(typeof ffIsFinal==="function"&&ffIsFinal()){toast("Day finalized — locked");return;}
+  // Auto-save current orders locally before jumping to POSM.
+  try{soSave(soLoad());}catch(e){}
+  try{renderFfList();}catch(e){}
+  // If the in-memory visit context is missing (page reload / direct tab open),
+  // rebuild it from the most recently saved order so POSM can still open.
+  if(!window._lastPosmVisit){
+    var l=soLoad();
+    if(!l.length){
+      toast("Pehle Field tab me ek store ka order punch karo");
+      var fb=document.querySelector('.nav button[data-v="field"]');if(fb)go("field",fb);
+      return;
+    }
+    var r=l[l.length-1];
+    window._lastPosmVisit={emp:r.emp,date:r.date,store:{storeName:r.storeName,storeType:r.storeType,city:r.city,state:r.state,companyCode:r.companyCode,clientId:r.clientId,dbCode:r.dbCode,dbName:r.dbName}};
+  }
+  toast("💾 Order saved — POSM khul raha hai");
+  posmStartFromVisit();
+}
 function osMode(mode,el){
   var seg=document.getElementById("os_mode_seg");if(seg)seg.querySelectorAll(".seg-btn").forEach(function(b){b.classList.remove("on");});if(el)el.classList.add("on");
   var rb=document.getElementById("os_review_box");if(rb)rb.style.display="none";
