@@ -997,6 +997,14 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       </div>
 
       <div class="card">
+        <div class="note" style="margin:0 0 8px">💾 Photo lene se pehle apna progress <b>Save</b> kar lo — form yahin bacha rahega. <b>Reset</b> se form khaali ho jayega.</div>
+        <div class="row2">
+          <button class="btn btn-ghost" type="button" onclick="nsSaveDraft()">💾 Save Progress</button>
+          <button class="btn btn-ghost" type="button" onclick="nsResetForm()">♻️ Reset</button>
+        </div>
+      </div>
+
+      <div class="card">
         <h2><span class="dot"></span>Live Photos <span class="hint" id="ns_photo_hint">(camera only — no gallery)</span></h2>
         <div class="row2">
           <div style="text-align:center">
@@ -2955,7 +2963,7 @@ function fStoreMode(mode,el){
   var isNew=(mode==="new");
   document.getElementById("f_new_wrap").style.display=isNew?"":"none";
   document.getElementById("f_old_wrap").style.display=isNew?"none":"";
-  if(isNew){try{fillDistDatalists();}catch(e){}try{nsUpdatePhotoMode();}catch(e){}}
+  if(isNew){try{fillDistDatalists();}catch(e){}try{nsUpdatePhotoMode();}catch(e){}try{nsRestoreDraft();}catch(e){}}
   window._secSource=(mode==="tel")?"Telephonic Call":"Store Visit";
   var lbl=document.getElementById("os_source_lbl");if(lbl)lbl.innerHTML=(mode==="tel")?"\ud83d\udcde Telephonic Call \u2014 order phone pe liya":"\ud83c\udfea MEGA BA &amp; BA Store \u2014 store visit";
   if(!isNew){osFillStores();osFillProdFilters();osFillProdList();renderOsLines();}
@@ -3043,6 +3051,29 @@ function nextNewStoreId(stateName,dateISO){
 
 function nsLoad(){try{return JSON.parse(localStorage.getItem("me_em_newstores_v1")||"[]");}catch(e){return [];}}
 function nsSave(l){try{localStorage.setItem("me_em_newstores_v1",JSON.stringify(l));}catch(e){toast("Storage full — photo bade hain");}}
+/* New Store DRAFT: save all typed fields (not photos) so a rep can leave & come back without losing progress. */
+var NS_DRAFT_KEY="me_em_newstore_draft_v1";
+function nsDraftFields(){return ["ns_dbcode","ns_dbname","ns_type","ns_name","ns_state","ns_town","ns_addr","ns_pin","ns_beat","ns_cat","ns_cat_other","ns_daysales","ns_monturn","ns_invhold","ns_sugbiz","ns_interest","ns_class","ns_compbrand","ns_compdisplay","ns_compmargin","ns_bacost","ns_totalcost","ns_beauty","ns_beautyname","ns_owner","ns_ownermob","ns_owneremail","ns_reason"];}
+function nsSaveDraft(){
+  var d={_emp:elv("f_emp"),_ts:Date.now()};
+  nsDraftFields().forEach(function(id){var el=document.getElementById(id);if(el)d[id]=el.value;});
+  try{localStorage.setItem(NS_DRAFT_KEY,JSON.stringify(d));toast("💾 Progress save ho gaya — photo baad me le sakte ho");}
+  catch(e){toast("Storage full");}
+}
+function nsClearDraft(){try{localStorage.removeItem(NS_DRAFT_KEY);}catch(e){}}
+// Restore a saved draft into the form (only if it belongs to the currently selected employee).
+function nsRestoreDraft(){
+  var d;try{d=JSON.parse(localStorage.getItem(NS_DRAFT_KEY)||"null");}catch(e){d=null;}
+  if(!d)return;
+  if(d._emp&&elv("f_emp")&&d._emp!==elv("f_emp"))return;   // draft is for a different rep
+  if((elv("ns_name")||"").trim())return;                  // form already has data — don't clobber active edits
+  nsDraftFields().forEach(function(id){var el=document.getElementById(id);if(el&&d[id]!=null)el.value=d[id];});
+  try{nsCatChange();}catch(e){}try{nsBeautyChange();}catch(e){}try{nsDbSyncBtn();}catch(e){}
+  var dbp=document.getElementById("ns_db_picked");
+  if(dbp&&(d.ns_dbcode||d.ns_dbname)){dbp.style.display="";dbp.innerHTML="✅ Selected: <b>"+escapeHtml(d.ns_dbname||"—")+"</b>"+(d.ns_dbcode?(" · "+escapeHtml(d.ns_dbcode)):"");}
+}
+// Reset button next to Save Progress: clear the form + the saved draft.
+function nsResetForm(){try{resetNewStore();}catch(e){}nsClearDraft();toast("♻️ Form reset");}
 function resetNewStore(){
   ["ns_dbcode","ns_dbname","ns_name","ns_addr","ns_pin","ns_beat","ns_cat_other","ns_daysales","ns_monturn","ns_compbrand","ns_compdisplay","ns_compmargin","ns_bacost","ns_totalcost","ns_beautyname","ns_invhold","ns_sugbiz","ns_owner","ns_ownermob","ns_owneremail","ns_reason"].forEach(function(id){var el=document.getElementById(id);if(el)el.value="";});
   ["ns_type","ns_cat","ns_interest","ns_class","ns_beauty"].forEach(function(id){var el=document.getElementById(id);if(el)el.selectedIndex=0;});
@@ -3074,6 +3105,7 @@ function saveNewStore(){
   var storeId=nextNewStoreId(elv("ns_state").trim(),date);
   var rec={id:"NS_"+Date.now(),storeId:storeId,code:code,emp:name,date:date,dbCode:elv("ns_dbcode").trim().toUpperCase(),dbName:elv("ns_dbname").trim(),type:elv("ns_type"),storeName:elv("ns_name").trim().toUpperCase(),state:elv("ns_state").trim(),town:elv("ns_town").trim(),address:elv("ns_addr").trim().toUpperCase(),pincode:elv("ns_pin").trim(),beat:elv("ns_beat").trim(),category:cat,daySales:num(elv("ns_daysales")),monthlyTurnover:num(elv("ns_monturn")),compBrand:elv("ns_compbrand").trim(),compDisplay:elv("ns_compdisplay").trim(),compMargin:elv("ns_compmargin").trim(),baCost:num(elv("ns_bacost")),totalCost:num(elv("ns_totalcost")),interest:elv("ns_interest"),outletClass:elv("ns_class"),beautician:elv("ns_beauty"),beauticianName:elv("ns_beautyname").trim(),invHold:num(elv("ns_invhold")),suggestBiz:num(elv("ns_sugbiz")),owner:elv("ns_owner").trim(),ownerMob:mob,ownerEmail:elv("ns_owneremail").trim(),reason:elv("ns_reason").trim(),front:nsPhotos.front,inside:nsPhotos.inside,status:"In-Process",statusReason:"",ts:nowTime()};
   var list=nsLoad();list.push(rec);nsSave(list);
+  nsClearDraft();
   toast("New store added \u2713");
   document.getElementById("field-out").innerHTML=nsSuccessHtml(rec);
   resetNewStore();window.scrollTo(0,document.body.scrollHeight);
