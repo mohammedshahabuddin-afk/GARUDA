@@ -3075,13 +3075,23 @@ function distName(code){var c=String(code||"").trim().toUpperCase();if(!c)return
 function distCode(name){var n=String(name||"").trim().toLowerCase();if(!n)return "";var d=distList().filter(function(z){return String(z.name||"").toLowerCase()===n;})[0];return d?(d.code||""):"";}
 // Backfill a store-fill object's distributor pair when master gives us one side only.
 function resolveDbPair(F){if(F.os_d_dbcode&&!F.os_d_dbname){var nm=distName(F.os_d_dbcode);if(nm)F.os_d_dbname=nm;}else if(!F.os_d_dbcode&&F.os_d_dbname){var cd=distCode(F.os_d_dbname);if(cd)F.os_d_dbcode=cd;}return F;}
-// Distributors mapped to the selected salesman = the distinct distributors of the stores
-// mapped to them in the Stores master (EM ASM NAME === employee name — the SAME mapping the
-// "Select Store" list uses via beatStores/osMyStores). Falls back to the full distributor
-// list only when the salesman has no mapped stores, so the New Store form is never blocked.
+// Normalize a name/code for tolerant comparison (trim, upper, collapse inner spaces).
+function _dbNorm(x){return String(x||"").trim().toUpperCase().replace(/\s+/g," ");}
+// Stores mapped to the selected salesman in the Stores master. The mapping column is
+// "EM ASM NAME" (s.emAsm) — the SAME column the "Select Store" list uses (beatStores/
+// osMyStores). We match it against the employee's NAME or CODE, space/case-insensitively.
+function empMappedStores(){
+  var name=elv("f_emp");if(!name)return [];
+  if(!osMasterHasBeat())return [];            // cached master has no EM ASM mapping → caller falls back to all
+  var nU=_dbNorm(name),cU=_dbNorm(empCodeOf(name));
+  return storeList().filter(function(s){var a=_dbNorm(s.emAsm);return a&&(a===nU||(cU&&a===cU));});
+}
+// Distributors mapped to the salesman = the DISTINCT distributors of their mapped stores.
+// Falls back to the full distributor list only when the salesman has no mapped stores (or the
+// cached master has no EM ASM column), so the New Store form is never blocked/empty.
 function empDbList(){
   var seen={},out=[];
-  beatStores(elv("f_emp")).forEach(function(s){
+  empMappedStores().forEach(function(s){
     var c=(s.dbCode||"").trim(),n=(s.dbName||"").trim();
     if(!c&&!n)return;
     var key=(c||n).toLowerCase();
@@ -3089,6 +3099,7 @@ function empDbList(){
     // Prefer the canonical name/code from the Distributors master when available.
     out.push({code:c||distCode(n),name:n||distName(c)});
   });
+  out.sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
   return out.length?out:distList();
 }
 function fillDistDatalists(){
@@ -6808,9 +6819,17 @@ function ffSubmit(){
   var out=document.getElementById("os_out");
   toast((isCancel?"🚫 ":"💾 ")+savedName+(isCancel?" cancelled" :" saved"));
   try{renderFfList();}catch(e){}
-  // Routing: an actual order → SEC Order tab (modify there, then Proceed to POSM).
-  // No-order / cancel → straight to POSM for this store.
-  if(pend.mode==="order"&&!isCancel){
+  // Routing:
+  //  • Telephonic order → no physical store visit, so POSM is pointless: skip it entirely and
+  //    offer Next Store / Close Day right here.
+  //  • Physical order   → SEC Order tab (modify there, then Proceed to POSM).
+  //  • No-order / cancel→ straight to POSM for this store.
+  var isTel=(rec.source==="Telephonic Call");
+  if(isTel){
+    window._lastPosmVisit=null;   // nothing to audit — clear the POSM visit context
+    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #7A5AF8"><div class="note" style="margin:0">📞 <b>'+escapeHtml(savedName)+'</b> — telephonic order saved. <span class="hint">Phone order hai, store visit nahi — POSM ki zaroorat nahi.</span></div>'
+      +'<div class="row2" style="margin-top:10px"><button class="btn btn-navy" onclick="posmNextStore()">➡️ Next Store</button><button class="btn btn-ghost" onclick="posmCloseDay()">🏁 Close Day (Final Submit)</button></div></div>';
+  }else if(pend.mode==="order"&&!isCancel){
     if(out)out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">💾 <b>'+escapeHtml(savedName)+'</b> order saved. <span class="hint">Opening SEC Order tab — modify if needed, then Proceed to POSM.</span></div></div>';
     var fb=document.querySelector('.nav button[data-v="fulfil"]');go("fulfil",fb);
   }else{
