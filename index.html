@@ -6419,11 +6419,11 @@ function eodSummaryInnerHtml(D,A){
     +eodTile(D.stores.length,"New Stores","opened")
     +eodTile(pq,"POSM Req","stores")
     +'</div>';
+  // Beat/Town only here — Calls/Orders/New Stores counts already shown in the KPI tiles (no dup).
   var s1=eodKV("Beat / Town",escapeHtml((plan.beat||"-")+" / "+(plan.town||"-")))
-    +eodKV("Calls SC/TC/PC",C.sc+" / "+C.tc+" / "+C.pc+' <span style="color:#8a968f">(target / visited / with-order)</span>')
-    +eodKV("Orders",A.placed.length+" placed · "+A.delivered.length+" delivered · "+A.pending.length+" pending")
-    +eodKV("New Stores",D.stores.length+(plan.nsoPlan?(' <span style="color:#8a968f">(plan '+plan.nsoPlan+')</span>'):""));
-  var s2=eodKV("Orders Placed",A.placed.length+" · "+A.totUnits+"u · ₹"+eodF(A.totNsv)+"L")
+    +(plan.focus?eodKV("Focus",escapeHtml(plan.focus)):"");
+  // Order vs Deliver — adds unit + ₹ + pending detail beyond the tiles.
+  var s2=eodKV("Placed",A.placed.length+" · "+A.totUnits+"u · ₹"+eodF(A.totNsv)+"L")
     +eodKV("Delivered (Billed)",A.delivered.length+" · "+A.delUnits+"u · ₹"+eodF(A.delNsv)+"L")
     +eodKV("Pending (in process)",A.pending.length+" · "+(A.totUnits-A.delUnits)+"u · ₹"+eodF(A.totNsv-A.delNsv)+"L")
     +eodKV("No Order / Cancel",String(A.noorder.length));
@@ -6435,11 +6435,11 @@ function eodSummaryInnerHtml(D,A){
   var s5="";["MEGA BA","BA Store"].forEach(function(st){var bb=A.stBrand[st];var ks=Object.keys(bb).sort(function(a,b){return bb[b].n-bb[a].n;});if(!ks.length)return;s5+='<div style="font-size:11.5px;font-weight:800;color:#44504a;margin:5px 0 2px">'+st+'</div>';ks.forEach(function(b){s5+=eodKV("&nbsp;&nbsp;"+escapeHtml(b),bb[b].u+"u · ₹"+eodF(bb[b].n)+"L");});});
   if(!s5)s5='<div style="font-size:12px;color:#8a968f">No order lines.</div>';
   return tiles
-    +eodSec("1 · Daily Plan vs Achievement",s1)
-    +eodSec("2 · Order Summary (Order vs Deliver)",s2)
-    +eodSec("3 · Brand Summary",s3)
-    +eodSec("4 · Mega BA & BA — MSL vs Non-MSL",s4)
-    +eodSec("5 · Mega BA & BA — Brand-wise",s5);
+    +eodSec("Plan (Beat / Town)",s1)
+    +eodSec("Order vs Deliver",s2)
+    +eodSec("Brand Summary",s3)
+    +eodSec("Mega BA & BA — MSL vs Non-MSL",s4)
+    +eodSec("Mega BA & BA — Brand-wise",s5);
 }
 
 function eodSummaryText(D,A){
@@ -6488,6 +6488,9 @@ function renderEodDaySummary(){
   out.innerHTML=eodSummaryInnerHtml(D,A);
   window._lastEodMsg=eodSummaryText(D,A);
   window._lastEodDate=D.date;
+  // Show the Send (WhatsApp/Gmail) card whenever there's something to send — usable any number
+  // of times, before OR after Save (no lock/restriction).
+  try{var _saved=load()[recId(D.name,D.date)];if(eodHasData()||(_saved&&_saved.eodDone))eodRenderShareBottom();else{var _o=document.getElementById("eod-out");if(_o)_o.innerHTML="";}}catch(e){}
 }
 
 function eodRecips(){
@@ -6640,23 +6643,8 @@ function eodPrepShareFiles(){
   _eodShareCache={img:null,key:key};
   eodBuildImageFileAsync().then(function(img){if(_eodShareCache.key===key)_eodShareCache.img=img;});
 }
-// Unified send (SYNC — runs in the tap gesture): attach summary IMAGE + EXCEL to WhatsApp / Gmail.
-// Mobile → one OS share sheet with both files + text. Desktop → download files + open channel w/ text.
-function eodShareAll(channel){
-  if(!window._lastEodDate){toast("Employee & date select karein");return;}
-  var txt=eodDaySummaryTextFull();window._lastEodMsg=txt;
-  var files=[];
-  if(_eodShareCache.img)files.push(_eodShareCache.img);          // pre-rendered image (if ready)
-  var xls=null;try{if(eodHasData())xls=eodBuildExcelFile();}catch(e){}   // Excel builds fast, in-gesture
-  if(xls)files.push(xls);
-  // Preferred path (mobile): OS share sheet with image + Excel + text together.
-  if(files.length&&navigator.canShare){
-    try{if(navigator.canShare({files:files})){navigator.share({files:files,text:txt,title:"EOD Day Report"}).catch(function(){});return;}}catch(e){}
-  }
-  // Desktop fallback: download the files (attach manually) + open the channel with the text.
-  if(_eodShareCache.img)eodDownloadFile(_eodShareCache.img);
-  if(xls)eodDownloadFile(xls);
-  if(_eodShareCache.img||xls)toast("📥 Image"+(xls?" + Excel":"")+" download ho gaye — "+(channel==="mail"?"Gmail":"WhatsApp")+" me attach kar do");
+// Open the channel (WhatsApp / Gmail) with the summary text — ALWAYS works (in-gesture window.open).
+function eodOpenChannel(channel,txt){
   if(channel==="mail"){
     var rs=eodRecips();var to=rs.filter(function(r){return r.email;}).map(function(r){return r.email;}).join(",");
     var sub="EOD Day Summary — "+(elv("e_emp")||"")+" — "+ddmmyy(elv("e_date")||todayISO());
@@ -6666,6 +6654,28 @@ function eodShareAll(channel){
     var n=String(mob||"").replace(/\D/g,"");if(n.length===10)n="91"+n;
     window.open("https://wa.me/"+n+"?text="+encodeURIComponent(txt),"_blank");
   }
+}
+// Unified send (SYNC — runs in the tap gesture). Can be used any number of times (no lock).
+//  MOBILE → OS share sheet with image + Excel + text (auto-attach; pick WhatsApp/Gmail).
+//  DESKTOP → open WhatsApp Web / Gmail compose with text (reliable) + download image + Excel to attach.
+function eodShareAll(channel){
+  if(!window._lastEodDate){toast("Employee & date select karein");return;}
+  var txt=eodDaySummaryTextFull();window._lastEodMsg=txt;
+  var isMobile=/Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|Opera Mini/i.test(navigator.userAgent||"");
+  var files=[];
+  if(_eodShareCache.img)files.push(_eodShareCache.img);          // pre-rendered image (if ready)
+  var xls=null;try{if(eodHasData())xls=eodBuildExcelFile();}catch(e){}   // Excel builds fast, in-gesture
+  if(xls)files.push(xls);
+  // MOBILE ONLY: OS share sheet (image + Excel + text). Desktop's share sheet usually has no
+  // WhatsApp/Gmail → felt "not working", so desktop always uses the reliable open-channel path.
+  if(isMobile&&files.length&&navigator.canShare){
+    try{if(navigator.canShare({files:files})){navigator.share({files:files,text:txt,title:"EOD Day Report"}).catch(function(){});return;}}catch(e){}
+  }
+  // Open the channel FIRST (guaranteed), then download the files to attach.
+  eodOpenChannel(channel,txt);
+  if(_eodShareCache.img)eodDownloadFile(_eodShareCache.img);
+  if(xls)eodDownloadFile(xls);
+  if(_eodShareCache.img||xls)toast("📥 Image"+(xls?" + Excel":"")+" download ho gaye — "+(channel==="mail"?"Gmail":"WhatsApp")+" me attach kar do");
 }
 function eodSendWhatsApp(){eodShareAll("wa");}
 function eodSendGmail(){eodShareAll("mail");}
