@@ -157,6 +157,8 @@ header{background:var(--navy);color:#fff;padding:14px 0 12px;box-shadow:0 2px 8p
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:13px;box-shadow:var(--shadow)}
 .card h2{font-size:13px;font-weight:800;color:var(--green);margin:0 0 12px;letter-spacing:.4px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
 .card h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--green2)}
+.card h2 .eod-step{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1}
+.card h2 .hint{text-transform:none;letter-spacing:0;color:var(--mute)}
 .mode-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;padding:4px 11px;border-radius:20px;color:#fff}
 .mode-badge.am{background:var(--gold)}
 .mode-badge.pm{background:var(--navy)}
@@ -1322,8 +1324,20 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <span class="mode-badge pm">🌙 Evening EOD</span>
       <span id="eod-date-lbl" class="note" style="margin:0"></span>
     </div>
+
+    <!-- Friendly intro / stepper so a salesman knows exactly what to do -->
+    <div class="card" style="border-left:4px solid #0E4F3B;background:linear-gradient(90deg,#f0fdf4,#ffffff)">
+      <div style="font-weight:800;font-size:14px;color:#0E4F3B;margin-bottom:4px">🌙 Din khatam? EOD bharo — 4 aasaan step</div>
+      <div class="hint" style="line-height:1.7">
+        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">1</span> Kaun &amp; Kahaan &nbsp;
+        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">2</span> Calls (auto) &nbsp;
+        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">3</span> Sales &amp; Execution &nbsp;
+        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">4</span> Review &amp; Send
+      </div>
+    </div>
+
     <div class="card">
-      <h2><span class="dot"></span>Who &amp; Where</h2>
+      <h2><span class="eod-step">1</span>Kaun &amp; Kahaan <span class="hint" style="font-weight:400">— Who &amp; Where</span></h2>
       <label>Date</label>
       <input type="date" id="e_date">
       <label>Emerging Employee</label>
@@ -1342,44 +1356,46 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
     </div>
     <div id="e_body">
     <div class="card">
-      <h2><span class="dot"></span>🌙 Day Summary <span id="eod_ds_date" class="hint" style="font-weight:400"></span></h2>
-      <div class="note" style="margin:0 0 8px">Poore din ka kaam ka summary — Order vs Deliver, brand-wise, MSL vs Non-MSL. HOD/ZM/RSM/ASM ko WhatsApp/Email/Image bhej sakte hain (Plan ki tarah).</div>
-      <div id="eod_ds_out"></div>
-      <div class="hint" style="margin-top:8px">📤 Save EOD karo — neeche <b>WhatsApp</b> / <b>Gmail</b> par bhejne ka option milega (poora din ka summary + naye outlet / sec order ki Excel).</div>
-    </div>
-    <div class="card">
-      <h2><span class="dot"></span>Calls — Plan vs Achieved</h2>
+      <h2><span class="eod-step">2</span>Calls <span class="hint" style="font-weight:400">— auto from today's visits</span></h2>
+      <div class="note" style="margin:0 0 8px">Ye 3 numbers aaj ke store-visits se <b>khud bharte</b> hain — aapko type nahi karna.</div>
       <div class="row3">
-        <div><label>SC <span class="hint">/7</span></label><input type="number" id="e_sc" min="0" placeholder="0" inputmode="numeric"></div>
-        <div><label>TC <span class="hint">total</span></label><input type="number" id="e_tc" min="0" placeholder="0" inputmode="numeric"></div>
-        <div><label>PC <span class="hint">productive</span></label><input type="number" id="e_pc" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>SC <span class="hint">Planned</span></label><input type="number" id="e_sc" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>TC <span class="hint">Total visited</span></label><input type="number" id="e_tc" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>PC <span class="hint">Order mila</span></label><input type="number" id="e_pc" min="0" placeholder="0" inputmode="numeric"></div>
       </div>
       <div id="e_callpct" class="note" style="margin-top:8px"></div>
     </div>
     <div class="card">
-      <h2><span class="dot"></span>Secondary Achievement — brand-wise (₹)</h2>
+      <h2><span class="eod-step">3</span>Secondary Sales <span class="hint" style="font-weight:400">— brand-wise (₹)</span></h2>
       <div class="note" style="margin:0 0 8px">Poora value ₹ mein daalo (jaise 285000) — app khud Lakh mein convert karega. FW/Serum TDC ke andar hain (alag nahi).</div>
       <div id="e_brands"></div>
       <div class="masterbar" id="e_ach_total"></div>
     </div>
     <div class="card" id="e_target_card" style="display:none">
-      <h2><span class="dot"></span>Standing vs Target — Sec / Phasing / Mega-BA</h2>
+      <h2><span class="dot"></span>Standing vs Target <span class="hint" style="font-weight:400">— Sec / Phasing / Mega-BA</span></h2>
       <div id="e_btg_cards"></div>
       <div style="margin-top:11px;font-size:12.5px;color:#5b6b64;font-weight:700">Brand-wise vs Phasing (MTD)</div>
       <div id="e_btg_brand" style="margin-top:4px"></div>
       <div class="masterbar" id="e_btg_note"></div>
     </div>
     <div class="card">
-      <h2><span class="dot"></span>Execution</h2>
+      <h2><span class="eod-step">4</span>Execution <span class="hint" style="font-weight:400">— MSL / naye outlet / display</span></h2>
       <div class="row3">
         <div><label>BA MSL <span class="hint">%</span></label><input type="number" id="e_msl" min="0" max="100" placeholder="0" inputmode="numeric"></div>
-        <div><label>NSO <span class="hint">opened</span></label><input type="number" id="e_nso" min="0" placeholder="0" inputmode="numeric"></div>
-        <div><label>Display <span class="hint">/POSM</span></label><input type="number" id="e_posm" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>NSO <span class="hint">naye outlet</span></label><input type="number" id="e_nso" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>Display <span class="hint">/POSM lagaye</span></label><input type="number" id="e_posm" min="0" placeholder="0" inputmode="numeric"></div>
       </div>
       <label>Remarks <span class="hint">(optional)</span></label>
       <textarea id="e_remarks" rows="2" placeholder="Any note / issue…"></textarea>
     </div>
-    <button class="btn btn-navy" onclick="saveEod()">💾 Save EOD (Close Day)</button>
+    <!-- Review card: auto day-summary sits just above Save so it reads as a final check before sending -->
+    <div class="card" style="border-left:4px solid #2f9e57">
+      <h2><span class="dot" style="background:#2f9e57"></span>📋 Aaj ka Summary <span id="eod_ds_date" class="hint" style="font-weight:400"></span></h2>
+      <div class="note" style="margin:0 0 8px">Niche bhare data se ye summary <b>auto</b> ban raha hai. Ek baar check karo, phir <b>Save</b> karke manager ko bhejo.</div>
+      <div id="eod_ds_out"></div>
+    </div>
+    <button class="btn btn-navy" onclick="saveEod()" style="font-size:15px;padding:14px">💾 Save EOD &amp; Close Day</button>
+    <div class="hint" style="text-align:center;margin-top:6px">Save ke baad WhatsApp / Gmail par bhejne ka option niche aayega 👇</div>
     </div>
     <div id="eod-out"></div>
   </section>
@@ -1407,7 +1423,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <button class="seg-btn" data-v="approvals" onclick="sumView('approvals',this)">✅ HOD Approvals <span id="sum_appr_badge" class="appr-badge" style="display:none"></span></button>
     </div>
     <div id="sum_approvals_wrap" style="display:none"></div>
-    <div id="sum_mine_wrap">
+    <div id="sum_mine_wrap" style="display:none">
       <div class="card">
         <h2><span class="dot"></span>My Summary</h2>
         <label>Employee</label>
@@ -1494,7 +1510,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
     </div>
 
     <!-- ═══════════════ OVERVIEW (4th button) ═══════════════ -->
-    <div id="sum_overview_wrap" style="display:none">
+    <div id="sum_overview_wrap">
       <div class="ov-filter">
         <div class="seg" id="ov_period_seg">
           <button class="seg-btn" data-p="D" onclick="ovPeriod('D',this)">Day</button>
