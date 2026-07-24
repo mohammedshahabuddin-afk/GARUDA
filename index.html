@@ -3146,8 +3146,13 @@ function shareNewStoreExcel(){
 var osStoreMap={},osStore=null,osOrder=[];
 function storeList(){var m=loadMaster();return (m&&m.stores)?m.stores:[];}
 function prodList(){var m=loadMaster();if(!m)return [];
-  if(m.products&&m.products.length)return m.products.map(function(x){return {code:x.code||x.pcode,name:x.name||x.product,brand:x.brand,targetBrand:x.targetBrand||x.tbrand||x.brand,category:x.category||x.cat,subCategory:x.subCategory||x.subcat,range:x.range||"",uom:x.uom||x.umo||"",mrp:x.mrp};});
-  return (m.msl||[]).map(function(x){return {code:x.pcode,name:x.product,brand:x.brand,targetBrand:x.brand,category:x.cat,subCategory:x.subcat,range:"",uom:"",mrp:x.mrp};});}
+  // MSL flag was missing from the mapped product objects → osIsMsl() saw undefined and the
+  // "MSL Only" filter matched nothing. A product is MSL if its Products-sheet "MSL Status"
+  // says MSL, OR its code is in the dedicated MSL master list (m.msl) — cover both sources.
+  var mslSet={};(m.msl||[]).forEach(function(x){var c=String(x.pcode||"").trim();if(c)mslSet[c]=1;});
+  function mslOf(x){var code=String(x.code||x.pcode||"").trim();if(/^MSL$/i.test(String(x.mslStatus||"")))return "MSL";if(code&&mslSet[code])return "MSL";return x.mslStatus||"";}
+  if(m.products&&m.products.length)return m.products.map(function(x){return {code:x.code||x.pcode,name:x.name||x.product,brand:x.brand,targetBrand:x.targetBrand||x.tbrand||x.brand,category:x.category||x.cat,subCategory:x.subCategory||x.subcat,range:x.range||"",uom:x.uom||x.umo||"",mrp:x.mrp,mslStatus:mslOf(x)};});
+  return (m.msl||[]).map(function(x){return {code:x.pcode,name:x.product,brand:x.brand,targetBrand:x.brand,category:x.cat,subCategory:x.subcat,range:"",uom:"",mrp:x.mrp,mslStatus:"MSL"};});}
 function osLabel(s){return (s.storeName||s.name||"")+" \u2014 "+(s.city||"")+" ["+(s.companyCode||s.code||s.clientId||"")+"]";}
 function osFillStores(){
   var type=elv("os_type");var dl=document.getElementById("dl_os_store");if(!dl)return;
