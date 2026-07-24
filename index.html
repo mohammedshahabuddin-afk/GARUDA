@@ -3075,23 +3075,13 @@ function distName(code){var c=String(code||"").trim().toUpperCase();if(!c)return
 function distCode(name){var n=String(name||"").trim().toLowerCase();if(!n)return "";var d=distList().filter(function(z){return String(z.name||"").toLowerCase()===n;})[0];return d?(d.code||""):"";}
 // Backfill a store-fill object's distributor pair when master gives us one side only.
 function resolveDbPair(F){if(F.os_d_dbcode&&!F.os_d_dbname){var nm=distName(F.os_d_dbcode);if(nm)F.os_d_dbname=nm;}else if(!F.os_d_dbcode&&F.os_d_dbname){var cd=distCode(F.os_d_dbname);if(cd)F.os_d_dbcode=cd;}return F;}
-// Code of the employee currently selected in the Field tab.
-function fieldEmpCode(){var name=elv("f_emp");return name?empCodeOf(name):"";}
-// This employee's own PJP towns (lower-cased set) — used to scope distributors to their territory.
-function empTownsFor(code){var m=loadMaster();var t={};if(!code||!m||!m.pjp)return t;m.pjp.forEach(function(p){if(String(p.code||"")===String(code)){var tn=(p.town||"").trim();if(tn)t[tn.toLowerCase()]=1;}});return t;}
-// Distributors mapped to an employee = those serving stores in the employee's territory
-// (store state ∈ employee states, or store city ∈ employee PJP towns). Falls back to the
-// full distributor list if the employee has no matching stores, so the form is never empty.
-function empDbList(code){
-  var all=distList();
-  if(!code)return all;
-  var sts={};empStates(code).forEach(function(s){if(s)sts[String(s).toLowerCase()]=1;});
-  var towns=empTownsFor(code);
+// Distributors mapped to the selected salesman = the distinct distributors of the stores
+// mapped to them in the Stores master (EM ASM NAME === employee name — the SAME mapping the
+// "Select Store" list uses via beatStores/osMyStores). Falls back to the full distributor
+// list only when the salesman has no mapped stores, so the New Store form is never blocked.
+function empDbList(){
   var seen={},out=[];
-  storeList().forEach(function(s){
-    var stMatch=s.state&&sts[String(s.state).toLowerCase()];
-    var tnMatch=s.city&&towns[String(s.city).toLowerCase()];
-    if(!(stMatch||tnMatch))return;
+  beatStores(elv("f_emp")).forEach(function(s){
     var c=(s.dbCode||"").trim(),n=(s.dbName||"").trim();
     if(!c&&!n)return;
     var key=(c||n).toLowerCase();
@@ -3099,17 +3089,17 @@ function empDbList(code){
     // Prefer the canonical name/code from the Distributors master when available.
     out.push({code:c||distCode(n),name:n||distName(c)});
   });
-  return out.length?out:all;
+  return out.length?out:distList();
 }
 function fillDistDatalists(){
-  var dl=empDbList(fieldEmpCode());var dc=document.getElementById("dl_ns_dbcode"),dn=document.getElementById("dl_ns_dbname");
+  var dl=empDbList();var dc=document.getElementById("dl_ns_dbcode"),dn=document.getElementById("dl_ns_dbname");
   if(dc){dc.innerHTML="";dl.forEach(function(z){if(!z.code&&!z.name)return;var o=document.createElement("option");o.value=(z.code||"");o.textContent=(z.name||"");dc.appendChild(o);});}
   if(dn){dn.innerHTML="";dl.forEach(function(z){if(!z.code&&!z.name)return;var o=document.createElement("option");o.value=(z.name||"");o.textContent=(z.code||"");dn.appendChild(o);});}
 }
-// Auto-sync: resolve within the employee's scoped list first, then fall back to the full
-// master so a manually typed valid distributor still pairs up.
-function nsDbFromCode(){var c=elv("ns_dbcode").trim().toUpperCase();if(!c)return;var l=empDbList(fieldEmpCode());var d=l.filter(function(z){return (z.code||"").toUpperCase()===c;})[0];var nm=d?(d.name||""):distName(c);if(nm)setv("ns_dbname",nm);}
-function nsDbFromName(){var n=elv("ns_dbname").trim().toLowerCase();if(!n)return;var l=empDbList(fieldEmpCode());var d=l.filter(function(z){return (z.name||"").toLowerCase()===n;})[0];var cd=d?(d.code||""):distCode(n);if(cd)setv("ns_dbcode",cd);}
+// Auto-sync: fill code from name / name from code, resolving within the salesman's mapped
+// distributors first, then falling back to the full master so any valid entry still pairs up.
+function nsDbFromCode(){var c=elv("ns_dbcode").trim().toUpperCase();if(!c)return;var d=empDbList().filter(function(z){return (z.code||"").toUpperCase()===c;})[0];var nm=d?(d.name||""):distName(c);if(nm)setv("ns_dbname",nm);}
+function nsDbFromName(){var n=elv("ns_dbname").trim().toLowerCase();if(!n)return;var d=empDbList().filter(function(z){return (z.name||"").toLowerCase()===n;})[0];var cd=d?(d.code||""):distCode(n);if(cd)setv("ns_dbcode",cd);}
 function syncFieldFromPlan(){
   var pn=elv("p_emp_name"),pd=elv("p_date");var fe=document.getElementById("f_emp");
   if(pn&&fe){for(var i=0;i<fe.options.length;i++){if(fe.options[i].value===pn){fe.value=pn;break;}}}
