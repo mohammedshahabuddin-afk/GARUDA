@@ -1325,15 +1325,15 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <span id="eod-date-lbl" class="note" style="margin:0"></span>
     </div>
 
-    <!-- Friendly intro / stepper so a salesman knows exactly what to do -->
+    <!-- Friendly intro so a salesman knows exactly what to do -->
     <div class="card" style="border-left:4px solid #0E4F3B;background:linear-gradient(90deg,#f0fdf4,#ffffff)">
-      <div style="font-weight:800;font-size:14px;color:#0E4F3B;margin-bottom:4px">🌙 Din khatam? EOD bharo — 4 aasaan step</div>
+      <div style="font-weight:800;font-size:14px;color:#0E4F3B;margin-bottom:4px">🌙 Din khatam? EOD — poora din ka summary ek jagah</div>
       <div class="hint" style="line-height:1.7">
-        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">1</span> Kaun &amp; Kahaan &nbsp;
-        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">2</span> Calls (auto) &nbsp;
-        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">3</span> Sales &amp; Execution &nbsp;
-        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">4</span> Review &amp; Send
+        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">1</span> Employee &amp; Date chuno &nbsp;
+        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">2</span> Summary dekho &nbsp;
+        <span style="display:inline-block;background:#0E4F3B;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:10.5px;margin-right:4px">3</span> Save &amp; Send
       </div>
+      <div class="hint" style="margin-top:5px">Sab numbers din bhar ke kaam se <b>auto</b> ban rahe hain — detail metrics <b>Summary</b> tab me hain.</div>
     </div>
 
     <div class="card">
@@ -1355,21 +1355,31 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <button class="btn btn-green" onclick="gotoPlanFromEod()">📋 Go to Plan &amp; save it</button>
     </div>
     <div id="e_body">
-    <div class="card">
-      <h2><span class="eod-step">2</span>Calls <span class="hint" style="font-weight:400">— auto from today's visits</span></h2>
-      <div class="note" style="margin:0 0 8px">Ye 3 numbers aaj ke store-visits se <b>khud bharte</b> hain — aapko type nahi karna.</div>
+    <!-- Manual Calls / Secondary / Execution inputs REMOVED from view (metrics live in the Summary tab
+         + auto Day Summary below). Kept hidden so auto-fill (SC/TC/PC) + saveEod keep working. -->
+    <div class="card" style="display:none">
+      <h2><span class="dot"></span>Calls</h2>
       <div class="row3">
-        <div><label>SC <span class="hint">Planned</span></label><input type="number" id="e_sc" min="0" placeholder="0" inputmode="numeric"></div>
-        <div><label>TC <span class="hint">Total visited</span></label><input type="number" id="e_tc" min="0" placeholder="0" inputmode="numeric"></div>
-        <div><label>PC <span class="hint">Order mila</span></label><input type="number" id="e_pc" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>SC</label><input type="number" id="e_sc" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>TC</label><input type="number" id="e_tc" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>PC</label><input type="number" id="e_pc" min="0" placeholder="0" inputmode="numeric"></div>
       </div>
       <div id="e_callpct" class="note" style="margin-top:8px"></div>
     </div>
-    <div class="card">
-      <h2><span class="eod-step">3</span>Secondary Sales <span class="hint" style="font-weight:400">— brand-wise (₹)</span></h2>
-      <div class="note" style="margin:0 0 8px">Poora value ₹ mein daalo (jaise 285000) — app khud Lakh mein convert karega. FW/Serum TDC ke andar hain (alag nahi).</div>
+    <div class="card" style="display:none">
+      <h2><span class="dot"></span>Secondary Sales</h2>
       <div id="e_brands"></div>
       <div class="masterbar" id="e_ach_total"></div>
+    </div>
+    <div class="card" style="display:none">
+      <h2><span class="dot"></span>Execution</h2>
+      <div class="row3">
+        <div><label>BA MSL</label><input type="number" id="e_msl" min="0" max="100" placeholder="0" inputmode="numeric"></div>
+        <div><label>NSO</label><input type="number" id="e_nso" min="0" placeholder="0" inputmode="numeric"></div>
+        <div><label>Display</label><input type="number" id="e_posm" min="0" placeholder="0" inputmode="numeric"></div>
+      </div>
+      <label>Remarks</label>
+      <textarea id="e_remarks" rows="2" placeholder="Any note / issue…"></textarea>
     </div>
     <div class="card" id="e_target_card" style="display:none">
       <h2><span class="dot"></span>Standing vs Target <span class="hint" style="font-weight:400">— Sec / Phasing / Mega-BA</span></h2>
@@ -1378,20 +1388,10 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <div id="e_btg_brand" style="margin-top:4px"></div>
       <div class="masterbar" id="e_btg_note"></div>
     </div>
-    <div class="card">
-      <h2><span class="eod-step">4</span>Execution <span class="hint" style="font-weight:400">— MSL / naye outlet / display</span></h2>
-      <div class="row3">
-        <div><label>BA MSL <span class="hint">%</span></label><input type="number" id="e_msl" min="0" max="100" placeholder="0" inputmode="numeric"></div>
-        <div><label>NSO <span class="hint">naye outlet</span></label><input type="number" id="e_nso" min="0" placeholder="0" inputmode="numeric"></div>
-        <div><label>Display <span class="hint">/POSM lagaye</span></label><input type="number" id="e_posm" min="0" placeholder="0" inputmode="numeric"></div>
-      </div>
-      <label>Remarks <span class="hint">(optional)</span></label>
-      <textarea id="e_remarks" rows="2" placeholder="Any note / issue…"></textarea>
-    </div>
-    <!-- Review card: auto day-summary sits just above Save so it reads as a final check before sending -->
+    <!-- 📊 EOD DASHBOARD — the whole day at a glance (auto-computed) -->
     <div class="card" style="border-left:4px solid #2f9e57">
-      <h2><span class="dot" style="background:#2f9e57"></span>📋 Aaj ka Summary <span id="eod_ds_date" class="hint" style="font-weight:400"></span></h2>
-      <div class="note" style="margin:0 0 8px">Niche bhare data se ye summary <b>auto</b> ban raha hai. Ek baar check karo, phir <b>Save</b> karke manager ko bhejo.</div>
+      <h2><span class="eod-step">2</span>Aaj ka Summary <span id="eod_ds_date" class="hint" style="font-weight:400"></span></h2>
+      <div class="note" style="margin:0 0 10px">Poore din ka kaam ek nazar me. Sab kuch <b>auto</b> — check karo aur <b>Save &amp; Send</b> karo.</div>
       <div id="eod_ds_out"></div>
     </div>
     <button class="btn btn-navy" onclick="saveEod()" style="font-size:15px;padding:14px">💾 Save EOD &amp; Close Day</button>
@@ -6398,9 +6398,27 @@ function eodCalls(D,A){
   var pc=(A&&A.placed)?A.placed.length:0;
   return {sc:sc,tc:tc,pc:pc};
 }
+// One KPI tile for the EOD dashboard (also used in the shared image — inline styles only).
+function eodTile(val,label,sub,color){
+  color=color||"#0E4F3B";
+  return '<div style="flex:1 1 30%;min-width:90px;background:#f6faf7;border:1px solid #e3ece5;border-radius:12px;padding:10px 8px;text-align:center;box-sizing:border-box">'
+    +'<div style="font-size:20px;font-weight:800;color:'+color+';line-height:1.1">'+val+'</div>'
+    +'<div style="font-size:11px;font-weight:700;color:#2c5f2d;margin-top:3px">'+label+'</div>'
+    +(sub?('<div style="font-size:9.5px;color:#8a968f;margin-top:1px">'+sub+'</div>'):'')+'</div>';
+}
 function eodSummaryInnerHtml(D,A){
   var plan=D.plan||{};
   var C=eodCalls(D,A);
+  var delPct=A.placed.length?Math.round(A.delivered.length/A.placed.length*100):0;
+  var pq=(D.posm||[]).length;
+  var tiles='<div style="display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 4px">'
+    +eodTile(C.tc,"Visits","target "+C.sc)
+    +eodTile(C.pc,"With Order","productive","#2f9e57")
+    +eodTile("₹"+eodF(A.totNsv)+"L","Secondary","NSV","#b4432f")
+    +eodTile(A.delivered.length,"Delivered",delPct+"% billed")
+    +eodTile(D.stores.length,"New Stores","opened")
+    +eodTile(pq,"POSM Req","stores")
+    +'</div>';
   var s1=eodKV("Beat / Town",escapeHtml((plan.beat||"-")+" / "+(plan.town||"-")))
     +eodKV("Calls SC/TC/PC",C.sc+" / "+C.tc+" / "+C.pc+' <span style="color:#8a968f">(target / visited / with-order)</span>')
     +eodKV("Orders",A.placed.length+" placed · "+A.delivered.length+" delivered · "+A.pending.length+" pending")
@@ -6416,7 +6434,8 @@ function eodSummaryInnerHtml(D,A){
   if(!s4)s4='<div style="font-size:12px;color:#8a968f">No order lines.</div>';
   var s5="";["MEGA BA","BA Store"].forEach(function(st){var bb=A.stBrand[st];var ks=Object.keys(bb).sort(function(a,b){return bb[b].n-bb[a].n;});if(!ks.length)return;s5+='<div style="font-size:11.5px;font-weight:800;color:#44504a;margin:5px 0 2px">'+st+'</div>';ks.forEach(function(b){s5+=eodKV("&nbsp;&nbsp;"+escapeHtml(b),bb[b].u+"u · ₹"+eodF(bb[b].n)+"L");});});
   if(!s5)s5='<div style="font-size:12px;color:#8a968f">No order lines.</div>';
-  return eodSec("1 · Daily Plan vs Achievement",s1)
+  return tiles
+    +eodSec("1 · Daily Plan vs Achievement",s1)
     +eodSec("2 · Order Summary (Order vs Deliver)",s2)
     +eodSec("3 · Brand Summary",s3)
     +eodSec("4 · Mega BA & BA — MSL vs Non-MSL",s4)
@@ -6458,9 +6477,12 @@ function renderEodDaySummary(){
   if(dl)dl.textContent=D.date?("· "+ddmmyy(D.date)):"";
   if(!D.name){out.innerHTML='<div class="note" style="margin:0">Employee &amp; date select karein.</div>';return;}
   var A=eodAgg(D.orders);
-  // Auto-fill SC/TC/PC from the day's data (read-only — always accurate).
+  // Auto-fill SC/TC/PC + NSO (new stores) + Display (POSM audits) from the day's data — the manual
+  // input cards are hidden, so these keep the saved EOD record accurate.
   var C=eodCalls(D,A);
   setv("e_sc",C.sc);setv("e_tc",C.tc);setv("e_pc",C.pc);
+  setv("e_nso",(D.stores||[]).length);
+  try{var _installed=(typeof saLoad==="function")?saLoad().filter(function(x){return (x.emp===D.name||x.code===D.code)&&x.date===D.date;}).length:0;if(document.getElementById("e_posm")&&!elv("e_posm"))setv("e_posm",_installed);}catch(e){}
   ["e_sc","e_tc","e_pc"].forEach(function(id){var el=document.getElementById(id);if(el)el.readOnly=true;});
   try{updateCallPct();}catch(e){}
   out.innerHTML=eodSummaryInnerHtml(D,A);
