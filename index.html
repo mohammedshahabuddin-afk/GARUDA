@@ -2781,6 +2781,8 @@ function buildPlanCardEl(r){
 function sharePlanImage(){
   var r=window._lastPlanRec;
   if(!r){toast("Save the plan first");return;}
+  // The rep is sending the plan notification to the HOD → unlock the Field tab.
+  try{planMarkNotified(r.date);if(typeof updateNavLocks==="function")updateNavLocks();}catch(e){}
   if(typeof html2canvas==="undefined"){toast("Image tool not loaded — sending as text");sendWA();return;}
   var card=buildPlanCardEl(r);document.body.appendChild(card);
   toast("Generating image…");
@@ -7333,14 +7335,22 @@ function _anyFieldActivityToday(){
   try{var po=(typeof poLoad==="function")?poLoad():[];for(var l=0;l<po.length;l++){if(po[l]&&po[l].date===today)return true;}}catch(e){}
   return false;
 }
+// Plan-notification tracking: Field stays locked until the rep SENDS the plan
+// notification (WhatsApp/image) to the HOD. Stores the ISO dates that were notified.
+var PLAN_NOTIFY_KEY="me_em_plan_notified_v1";
+function planNotifiedDates(){try{return JSON.parse(localStorage.getItem(PLAN_NOTIFY_KEY)||"[]");}catch(e){return [];}}
+function planMarkNotified(date){try{var a=planNotifiedDates();if(date&&a.indexOf(date)<0){a.push(date);localStorage.setItem(PLAN_NOTIFY_KEY,JSON.stringify(a));}}catch(e){}}
+function planNotifiedFor(date){return planNotifiedDates().indexOf(date)>=0;}
+function _anyPlanNotifiedToday(){return planNotifiedFor(todayISO());}
 function workflowLevel(){
   // Level 0: base (Summary, PJP, Stock, Data always open)
   // Level 1: PJP HOD-approved → Plan opens
-  // Level 2: Plan saved today → Field opens
+  // Level 2: Plan saved today AND plan notification sent to HOD → Field opens
   // Level 3: any Field activity today (sec order / new store / POSM) → SEC Order + POSM + EOD open
   if(fullAccess())return 3;
   if(!_anyPjpHodApproved())return 0;
   if(!_anyPlanTodayDone())return 1;
+  if(!_anyPlanNotifiedToday())return 1; // plan saved but HOD notification NOT sent yet → keep Field locked
   if(!_anyFieldActivityToday())return 2;
   return 3;
 }
@@ -7363,7 +7373,10 @@ function navLockMsg(v){
   if(getRole()==="admin")return "";
   var lvl=workflowLevel();
   if(v==="plan"&&lvl<1)return "🔒 Pehle PJP HOD-Approved karwao — PJP tab me draft banao → Admin Accept → HOD Approve";
-  if(v==="field"&&lvl<2)return "🔒 Pehle aaj ka Plan save karo — Plan tab me Save & Send karo";
+  if(v==="field"&&lvl<2){
+    if(_anyPlanTodayDone()&&!_anyPlanNotifiedToday())return "You have not sent the SMS notification to your HOD. Please send the notification to proceed.";
+    return "🔒 Pehle aaj ka Plan save karo — Plan tab me Save & Send karo";
+  }
   if((v==="fulfil"||v==="posm"||v==="eod")&&lvl<3)return "🔒 Pehle Field pe koi order / new store / POSM save karo — phir SEC Order, POSM, EOD sab khulenge";
   return "🔒 Locked";
 }
