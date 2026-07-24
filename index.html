@@ -6630,12 +6630,12 @@ function saGateYes(){
 }
 function saGateNo(){
   if(!poStore)return;
-  saGateAnswer="No";
-  saState={photos:{inside:"",outside:""}};
-  var sf=document.getElementById("sa_form");if(sf)sf.style.display="none";
-  var snf=document.getElementById("sa_no_form");if(snf)snf.style.display="";
-  renderSaNoPhotos();renderPoContext();
-  if(snf&&snf.scrollIntoView)snf.scrollIntoView({behavior:"smooth",block:"start"});
+  // POSM NOT installed → no audit to do. Send the rep to the Requirement sub-tab to raise a
+  // POSM requirement for this store (per user flow).
+  saGateReset();
+  var rb=document.querySelector('#po_subnav .seg-btn[data-s="req"]');
+  poSubTab("req",rb);
+  toast("❌ POSM not installed — Requirement tab me requirement raise karein");
 }
 function saGateReset(){saGateAnswer=null;var sf=document.getElementById("sa_form");if(sf)sf.style.display="none";var snf=document.getElementById("sa_no_form");if(snf)snf.style.display="none";renderPoContext();}
 function saPeriodOptions(sel){
@@ -11191,6 +11191,8 @@ function tadaFillClaimDesigDropdown(){
       try{if(typeof updateApprBadge==="function")updateApprBadge();var aw=document.getElementById("sum_approvals_wrap");if(aw&&aw.style.display!=="none"&&typeof renderApprovals==="function")renderApprovals();}catch(e){}
       // If a plan-change approval came back (HOD approved/rejected), re-evaluate the Plan gate so it unlocks.
       try{var pv=document.getElementById("v-plan");if(pv&&pv.classList.contains("active")&&typeof planGate==="function")planGate();}catch(e){}
+      // Dashboard was likely rendered empty on first load (before data arrived) → re-render now if it's showing.
+      try{var smv=document.getElementById("v-sum");if(smv&&smv.classList.contains("active")&&typeof renderOverview==="function")renderOverview();}catch(e){}
       // Store role/code for filters
       try{
         localStorage.setItem("me_em_sync_role",res.role||"Employee");
