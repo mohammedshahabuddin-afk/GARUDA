@@ -1127,7 +1127,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <div id="pending_orders_list"></div>
     </div>
     <div id="ff_current"></div>
-    <div class="card"><h2><span class="dot"></span>📋 Today's Visits (store-wise)</h2><div id="ff_list"></div></div>
+    <div class="card"><h2><span class="dot"></span>📋 Orders — store-wise (all) <span class="hint">— Edit karke quantity change karo, ya naya product add karo</span></h2><div id="ff_list"></div></div>
     <div id="ff_out"></div>
   </section>
 
@@ -2139,7 +2139,7 @@ function go(v,el){
   if(v==="tada"){if(typeof tadaInit==="function")tadaInit();}
   // Apply employee self-only restriction after every tab switch
   try{if(typeof applyEmployeeSelfRestrictionToDropdowns==="function")applyEmployeeSelfRestrictionToDropdowns();}catch(e){}
-  if(v==="fulfil"){renderFfCurrent();renderFfList();var _d=document.getElementById("ff-date-lbl");if(_d)_d.textContent=elv("f_date")?ddmmyy(elv("f_date")):"";if(typeof refreshPendingBanners==="function")refreshPendingBanners();}
+  if(v==="fulfil"){try{renderFfCurrent();}catch(e){}try{renderFfList();}catch(e){}var _d=document.getElementById("ff-date-lbl");if(_d)_d.textContent=elv("f_date")?ddmmyy(elv("f_date")):"";if(typeof refreshPendingBanners==="function")refreshPendingBanners();}
   if(v==="posm"){posmInit();}
   if(v==="stock"){stockInit();}
   if(typeof updateNavLocks==="function")updateNavLocks();
@@ -4741,6 +4741,21 @@ function secEditPanel(r){
 }
 function soRecalc(r){var tu=0,tn=0;(r.lines||[]).forEach(function(o){var val=(o.value!=null&&o.value!=="")?num(o.value):num(o.units)*num(o.mrp);o.value=val;tu+=num(o.units);tn+=val*0.6/100000;});r.totUnits=tu;r.totNsv=+tn.toFixed(4);}
 function soUpdate(id,fn){var l=soLoad();for(var i=0;i<l.length;i++){if(l[i].id===id){fn(l[i]);soRecalc(l[i]);l[i].ts=nowTime();break;}}soSave(l);}
+/* Persist ONE edited SEC order to the sheet (upsert by PoNumber). Date pushed as ISO —
+   the backend pull normalizes it. So an inline quantity edit actually saves + syncs. */
+function soPushOne(rec){
+  try{
+    if(!rec||!(window.__sync&&window.__sync.push))return;
+    window.__sync.push("SecOrders",[{
+      PoNumber:rec.id,Date:rec.date,EmpCode:rec.code,EmpName:rec.emp,
+      OrderSource:rec.source||"Store Visit",StoreType:rec.storeType,ClientId:rec.clientId,
+      CompanyCode:rec.companyCode,StoreName:rec.storeName,City:rec.city,State:rec.state,
+      DbCode:rec.dbCode,DbName:rec.dbName,Status:rec.status,CancelReason:rec.cancelReason||"",
+      Remarks:rec.remarks||"",TotUnits:rec.totUnits||0,TotNsv:rec.totNsv||0,
+      LinesJson:JSON.stringify(rec.lines||[]),Ts:rec.ts
+    }],"PoNumber");
+  }catch(e){}
+}
 function secEditOpen(id){if(ffIsFinal()){toast("Day finalized \u2014 edit lock");return;}window._secEditId=id;renderFfList();}
 function secEditClose(){window._secEditId=null;renderFfList();}
 function secEditUnits(id,i,v){soUpdate(id,function(r){if(r.lines&&r.lines[i]){r.lines[i].units=num(v);r.lines[i].value=num(v)*num(r.lines[i].mrp);}});renderFfList();}
@@ -4749,7 +4764,14 @@ function secEditRemoveLine(id,i){soUpdate(id,function(r){if(r.lines)r.lines.spli
 function secEditStatus(id,v){soUpdate(id,function(r){r.status=v;});renderFfList();}
 function secEditReason(id,v){soUpdate(id,function(r){r.cancelReason=v;});}
 function secEditRemarks(id,v){soUpdate(id,function(r){r.remarks=v;});}
-function secEditDone(id){window._secEditId=null;renderFfList();try{renderFfCurrent();}catch(e){}toast("\ud83d\udcbe Order update ho gaya (locally)");}
+function secEditDone(id){
+  // Persist + SYNC the edited order (quantity/value/status) so the change saves successfully,
+  // not just locally. (Each field already wrote to localStorage on change.)
+  var rec=soLoad().filter(function(r){return r.id===id;})[0];
+  try{if(rec)soPushOne(rec);}catch(e){}
+  window._secEditId=null;renderFfList();try{renderFfCurrent();}catch(e){}
+  toast("\ud83d\udcbe Order updated & synced \u2713");
+}
 function ffCloseDay(){
   if(!soLoad().length){toast("Koi visit nahi");return;}
   if(_ffPending){toast("Pehle current order Submit ya Field se hatao");return;}
