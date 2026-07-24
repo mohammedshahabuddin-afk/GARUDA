@@ -6507,16 +6507,15 @@ function renderSaFields(){
     +'<label style="margin-top:8px">3 · Installation Location</label><select id="sa_location">'+saOpts(SA_LOCATION)+'</select>'
     +'<label style="margin-top:8px">4 · Honasa Brand</label><select id="sa_brand">'+saOpts(SA_BRAND)+'</select>'
     +'<label style="margin-top:8px">5 · Asset Type</label><select id="sa_asset">'+saOpts(SA_ASSET)+'</select>'
-    +'<label style="margin-top:8px">6 · Store Name &amp; Code</label><div class="note" style="margin:0">'+escapeHtml(s.storeName||"")+' — '+escapeHtml(String(s.companyCode||s.clientId||"-"))+' · '+escapeHtml(s.city||"")+'</div>'
-    +'<label style="margin-top:8px">7 · Installation Period</label><select id="sa_period">'+saPeriodOptions(saFyLabel(today))+'</select>'
-    +'<label style="margin-top:8px">8 · Brand Dominance</label><select id="sa_dominance">'+saOpts(SA_DOMINANCE)+'</select>'
-    +'<label style="margin-top:8px">9 · POSM Condition</label><select id="sa_condition">'+saOpts(SA_CONDITION)+'</select>'
-    +'<label style="margin-top:8px">10 · Visibility Score</label><select id="sa_visibility">'+saOpts(SA_VISIBILITY)+'</select>'
-    +'<label style="margin-top:8px">11 · Action Required</label><select id="sa_action">'+saOpts(SA_ACTION)+'</select>'
-    +'<label style="margin-top:8px">12 · Installed By</label><select id="sa_installedby">'+saOpts(SA_INSTALLEDBY)+'</select>'
-    +'<label style="margin-top:8px">13 · Verified By</label><select id="sa_verifiedby">'+saOpts(SA_VERIFIEDBY)+'</select>'
-    +'<div class="row2" style="margin-top:8px"><div><label>14 · Verification Date</label><input type="date" id="sa_verifydate" value="'+escapeHtml(today)+'"></div><div><label>15 · Next Review Date</label><input type="date" id="sa_nextreview"></div></div>'
-    +'<label style="margin-top:8px">16 · Remarks</label><textarea id="sa_remarks" rows="2" style="width:100%;box-sizing:border-box;resize:vertical" placeholder="Reason for action, damage details, missing POSM, retailer feedback, etc."></textarea>';
+    +'<label style="margin-top:8px">6 · Installation Period</label><select id="sa_period">'+saPeriodOptions("")+'</select>'
+    +'<label style="margin-top:8px">7 · Brand Dominance</label><select id="sa_dominance">'+saOpts(SA_DOMINANCE)+'</select>'
+    +'<label style="margin-top:8px">8 · POSM Condition</label><select id="sa_condition">'+saOpts(SA_CONDITION)+'</select>'
+    +'<label style="margin-top:8px">9 · Visibility Score</label><select id="sa_visibility">'+saOpts(SA_VISIBILITY)+'</select>'
+    +'<label style="margin-top:8px">10 · Action Required</label><select id="sa_action">'+saOpts(SA_ACTION)+'</select>'
+    +'<label style="margin-top:8px">11 · Installed By</label><select id="sa_installedby">'+saOpts(SA_INSTALLEDBY)+'</select>'
+    +'<label style="margin-top:8px">12 · Verified By</label><select id="sa_verifiedby">'+saOpts(SA_VERIFIEDBY)+'</select>'
+    +'<div class="row2" style="margin-top:8px"><div><label>13 · Verification Date</label><input type="date" id="sa_verifydate" value=""></div><div><label>14 · Next Review Date</label><input type="date" id="sa_nextreview"></div></div>'
+    +'<label style="margin-top:8px">15 · Remarks</label><textarea id="sa_remarks" rows="2" style="width:100%;box-sizing:border-box;resize:vertical" placeholder="Reason for action, damage details, missing POSM, retailer feedback, etc."></textarea>';
 }
 function saPhotoSlot(label,key){var img=saState.photos[key];if(img)return '<div><div class="hint">'+label+'</div><img src="'+img+'" style="width:100%;border-radius:8px;border:1px solid #dfe6e2;cursor:pointer" onclick="openCamSA(\''+key+'\')"></div>';return '<div><div class="hint">'+label+'</div><button class="btn btn-ghost" onclick="openCamSA(\''+key+'\')" style="width:100%">📷 Camera</button></div>';}
 function renderSaPhotos(){var box=document.getElementById("sa_photos");if(!box)return;box.innerHTML=saPhotoSlot("Display Photo","display")+saPhotoSlot("Store Photo","store");}
