@@ -1082,7 +1082,7 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
             <button type="button" class="seg-btn" data-v="nonmsl" onclick="osSetMslFilter('nonmsl',this)">📦 Non-MSL</button>
           </div>
           <div class="row2">
-            <div><label class="hint" style="margin-top:0">Brand Name <span style="color:#b4432f;font-weight:700">*</span></label><input id="os_f_brand" list="dl_os_brand" oninput="osProdFilter()" onchange="osProdFilter()" placeholder="Brand chuno (zaroori)" autocomplete="off"><datalist id="dl_os_brand"></datalist></div>
+            <div><label class="hint" style="margin-top:0">Brand Name</label><input id="os_f_brand" list="dl_os_brand" oninput="osProdFilter()" onchange="osProdFilter()" placeholder="Brand se filter (optional)" autocomplete="off"><datalist id="dl_os_brand"></datalist></div>
             <div><label class="hint" style="margin-top:0">Target Brand</label><input id="os_f_tbrand" list="dl_os_tbrand" oninput="osProdFilter()" onchange="osProdFilter()" placeholder="Search" autocomplete="off"><datalist id="dl_os_tbrand"></datalist></div>
           </div>
           <div class="row2">
@@ -5463,7 +5463,7 @@ function osFacetPass(z,F,exceptKey){
   }
   return true;
 }
-function osFilteredProds(){var F=osReadF();if(!F.brand)return [];return prodList().filter(function(z){return osFacetPass(z,F,null);});}
+function osFilteredProds(){var F=osReadF();return prodList().filter(function(z){return osFacetPass(z,F,null);});}
 function osCascadeFilters(){
   var pl=prodList();var F=osReadF();
   function opts(ex,g){var s={};pl.forEach(function(z){if(osFacetPass(z,F,ex)){var v=g(z);if(v)s[v]=1;}});return Object.keys(s).sort();}
@@ -5487,22 +5487,20 @@ function osClearBelow(level){osProdFilter();}   /* no downstream clearing — fr
 function osAutoBrand(){}                          /* not needed (brand is first) */
 function osFillProdFilters(){osCascadeFilters();}
 function osFillProdList(){
-  var brand=elv("os_f_brand");
   var dl=document.getElementById("dl_os_prod");var c=document.getElementById("os_prod_count");
-  if(!brand){if(dl)dl.innerHTML="";if(c)c.textContent="\u2014 pehle Brand Name select karo";return;}
   var prods=osFilteredProds();
   if(dl){dl.innerHTML="";prods.slice(0,300).forEach(function(z){var o=document.createElement("option");o.value=(_osProdTab==="name")?(z.name||""):(z.code||"");dl.appendChild(o);});}
   if(c)c.textContent="("+prods.length+" products)";
+  try{if(typeof osRenderQuickList==="function")osRenderQuickList();}catch(e){}
 }
 function osProdSearch(){
   var box=document.getElementById("os_prod_ac");if(!box)return;
-  if(!elv("os_f_brand")){box.innerHTML='<div class="ac-item ac-sub">Pehle upar <b>Brand Name</b> select karo</div>';box.style.display="block";return;}
   var q=elv("os_f_prod").trim().toLowerCase();
   if(!q){box.style.display="none";box.innerHTML="";return;}
   var pl=osFilteredProds();var byName=(_osProdTab==="name");
   var hits=pl.filter(function(z){var f=byName?String(z.name||""):String(z.code||"");return f.toLowerCase().indexOf(q)>=0;}).slice(0,25);
   _osProdHits=hits;
-  if(!hits.length){box.innerHTML='<div class="ac-item ac-sub">No product match ('+escapeHtml(elv("os_f_brand"))+')</div>';box.style.display="block";return;}
+  if(!hits.length){box.innerHTML='<div class="ac-item ac-sub">No product match</div>';box.style.display="block";return;}
   box.innerHTML=hits.map(function(z,i){var main=byName?(z.name||""):(z.code||""),sub=byName?(z.code||""):(z.name||"");return '<div class="ac-item" onclick="osAddByProdObj('+i+')"><div style="font-weight:600">'+escapeHtml(String(main))+'</div><div class="ac-sub">'+escapeHtml(String(sub))+(z.mrp?(' \u00b7 MRP \u20b9'+z.mrp):'')+'</div></div>';}).join("");
   box.style.display="block";
 }
@@ -5547,7 +5545,6 @@ function osAddByProdObj(i){
   var fp=document.getElementById("os_f_prod");if(fp&&fp.focus)fp.focus();
 }
 function osAddByProd(){
-  if(!elv("os_f_brand")){toast("Pehle Brand Name select karo");return;}
   var v=elv("os_f_prod").trim();if(!v)return;var pl=osFilteredProds();var byName=(_osProdTab==="name");
   var pp=pl.filter(function(z){var f=byName?String(z.name||""):String(z.code||"");return f===v||f.toLowerCase()===v.toLowerCase();})[0]||pl.filter(function(z){return String(z.code)===v||String(z.name)===v;})[0];
   if(!pp){toast("List se select karein");return;}
@@ -5568,15 +5565,21 @@ function osClearFilters(){
 /* ===== Find Product v5: auto-show filtered products as tap-to-add list ===== */
 function osRenderQuickList(){
   var box=document.getElementById("os_prod_quick");if(!box)return;
-  if(!elv("os_f_brand")){box.innerHTML="";return;}
+  var F=osReadF();
+  var anyFilter=!!(F.brand||F.tbrand||F.cat||F.subcat||F.range||F.uom);
   var prods=osFilteredProds();
   if(!prods.length){box.innerHTML='<div class="hint" style="padding:5px 2px">Is filter me koi product nahi</div>';return;}
-  if(prods.length>30){box.innerHTML='<div class="hint" style="padding:5px 2px">'+prods.length+' products \u2014 thoda aur filter karo (ya upar code/name search karo)</div>';return;}
-  box.innerHTML='<div class="hint" style="margin:2px 0 4px;font-weight:600">\u2193 Tap karke add karo ('+prods.length+')</div>'+prods.map(function(z){
+  // Before any filter is chosen the set can be the whole catalog \u2014 prompt to pick a brand so we
+  // don't render hundreds of rows. Once a Brand (or ANY filter) is set, show the FULL tap list.
+  if(!anyFilter&&prods.length>80){box.innerHTML='<div class="hint" style="padding:5px 2px">'+prods.length+' products \u2014 <b>Brand</b> select karo to poori list yahin dikhe (ya upar Product search karo)</div>';return;}
+  var cap=300;var show=prods.slice(0,cap);
+  var rows=show.map(function(z){
     var added=osOrder.some(function(o){return String(o.code)===String(z.code);});
     var cd=String(z.code||"").replace(/'/g,"");
     return '<div class="ac-item" style="border:1px solid #e6ece9;border-radius:8px;margin-bottom:4px;'+(added?'opacity:.5;background:#f0f5f2':'')+'" onclick="osQuickAdd(\''+cd+'\')"><div style="font-weight:600;font-size:12px">'+escapeHtml(z.name||"")+(added?' \u2713 added':'')+'</div><div class="ac-sub">'+escapeHtml(String(z.code))+(z.mrp?(' \u00b7 \u20b9'+z.mrp):'')+(z.uom?(' \u00b7 '+escapeHtml(z.uom)):'')+'</div></div>';
   }).join("");
+  box.innerHTML='<div class="hint" style="margin:2px 0 4px;font-weight:600">\u2193 Tap karke add karo ('+prods.length+(prods.length>cap?(", showing "+cap):"")+')</div>'
+    +'<div style="max-height:360px;overflow:auto">'+rows+'</div>';
 }
 function osQuickAdd(code){
   var pp=prodList().filter(function(z){return String(z.code)===String(code);})[0];if(!pp)return;
