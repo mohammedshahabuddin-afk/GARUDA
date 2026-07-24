@@ -909,10 +909,10 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <div class="card">
         <h2><span class="dot"></span>Store Details</h2>
         <div class="note" style="margin:0 0 6px">🔗 Distributor (DB) — jinke through ye store maal purchase karega</div>
-        <div class="row2">
-          <div><label class="hint" style="margin-top:0">Distributor Code</label><select id="ns_dbcode" onchange="nsDbFromCode()"><option value="">Select DB code…</option></select></div>
-          <div><label class="hint" style="margin-top:0">Distributor Name</label><select id="ns_dbname" onchange="nsDbFromName()"><option value="">Select DB name…</option></select></div>
-        </div>
+        <label class="hint" style="margin-top:0">Distributor (Code — Name)</label>
+        <select id="ns_db" onchange="nsDbPick()"><option value="">Select distributor…</option></select>
+        <div class="note" id="ns_db_picked" style="margin:6px 0 0;display:none"></div>
+        <input type="hidden" id="ns_dbcode"><input type="hidden" id="ns_dbname">
         <label>1 · Store Type</label>
         <select id="ns_type"><option value="">Select…</option><option>MEGA BA</option><option>BA</option></select>
         <label>2 · BA Store Name</label>
@@ -3040,7 +3040,8 @@ function nsLoad(){try{return JSON.parse(localStorage.getItem("me_em_newstores_v1
 function nsSave(l){try{localStorage.setItem("me_em_newstores_v1",JSON.stringify(l));}catch(e){toast("Storage full — photo bade hain");}}
 function resetNewStore(){
   ["ns_dbcode","ns_dbname","ns_name","ns_addr","ns_pin","ns_beat","ns_cat_other","ns_daysales","ns_monturn","ns_compbrand","ns_compdisplay","ns_compmargin","ns_bacost","ns_totalcost","ns_beautyname","ns_invhold","ns_sugbiz","ns_owner","ns_ownermob","ns_owneremail","ns_reason"].forEach(function(id){var el=document.getElementById(id);if(el)el.value="";});
-  ["ns_type","ns_cat","ns_interest","ns_class","ns_beauty"].forEach(function(id){var el=document.getElementById(id);if(el)el.selectedIndex=0;});
+  ["ns_type","ns_cat","ns_interest","ns_class","ns_beauty","ns_db"].forEach(function(id){var el=document.getElementById(id);if(el)el.selectedIndex=0;});
+  var dbp=document.getElementById("ns_db_picked");if(dbp){dbp.style.display="none";dbp.innerHTML="";}
   nsPhotos={front:"",inside:""};
   ["front","inside"].forEach(function(w){var img=document.getElementById("ns_"+w+"_img"),ph=document.getElementById("ns_"+w+"_ph");if(img){img.src="";img.style.display="none";}if(ph)ph.style.display="";});
   var a=document.getElementById("ns_cat_other_wrap");if(a)a.style.display="none";
@@ -3113,14 +3114,36 @@ function empDbList(){
   if(all&&all.length)return all.slice().sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
   return _dbsFromStores(storeList());
 }
-// Populate the two Distributor <select> dropdowns in the New Store form from the salesman's
-// mapped distributors. Code dropdown shows "CODE — Name"; Name dropdown shows "Name [CODE]".
-// (Name kept as fillDistDatalists for its existing callers.)
+// Populate the single Distributor <select> in the New Store form from the salesman's mapped
+// distributors. Each option carries its code + name; nsDbPick() copies them into the hidden
+// ns_dbcode / ns_dbname fields that saveNewStore reads. (Name kept as fillDistDatalists for
+// its existing callers: fieldRefresh + fStoreMode('new').)
 function fillDistDatalists(){
-  var dl=empDbList();
-  var dc=document.getElementById("ns_dbcode"),dn=document.getElementById("ns_dbname");
-  if(dc){var cur=dc.value;dc.innerHTML='<option value="">Select DB code…</option>';dl.forEach(function(z){if(!z.code)return;var o=document.createElement("option");o.value=z.code;o.textContent=z.code+(z.name?(" — "+z.name):"");dc.appendChild(o);});dc.value=cur;}
-  if(dn){var cur2=dn.value;dn.innerHTML='<option value="">Select DB name…</option>';dl.forEach(function(z){if(!z.name)return;var o=document.createElement("option");o.value=z.name;o.textContent=z.name+(z.code?(" ["+z.code+"]"):"");dn.appendChild(o);});dn.value=cur2;}
+  var sel=document.getElementById("ns_db");if(!sel)return;
+  var cur=sel.value;
+  sel.innerHTML='<option value="">Select distributor…</option>';
+  empDbList().forEach(function(z){
+    var code=(z.code||""),nm=(z.name||"");
+    if(!code&&!nm)return;
+    var o=document.createElement("option");
+    o.value=code||nm;                 // stable key for this option
+    o.setAttribute("data-code",code);
+    o.setAttribute("data-name",nm);
+    o.textContent=(code?code:"")+(code&&nm?" — ":"")+(nm?nm:"");
+    sel.appendChild(o);
+  });
+  sel.value=cur;                       // keep prior pick if still present
+  nsDbPick();                          // sync hidden code/name to the (restored) selection
+}
+// User picked a distributor → copy its code + name into the hidden fields + show a confirmation.
+function nsDbPick(){
+  var sel=document.getElementById("ns_db");if(!sel)return;
+  var o=sel.options[sel.selectedIndex];
+  var code=o?(o.getAttribute("data-code")||""):"";
+  var nm=o?(o.getAttribute("data-name")||""):"";
+  setv("ns_dbcode",code);setv("ns_dbname",nm);
+  var lbl=document.getElementById("ns_db_picked");
+  if(lbl){if(code||nm){lbl.style.display="";lbl.innerHTML="✅ <b>"+escapeHtml(nm||"—")+"</b>"+(code?(" · "+escapeHtml(code)):"");}else{lbl.style.display="none";lbl.innerHTML="";}}
 }
 // Auto-sync: fill code from name / name from code, resolving within the salesman's mapped
 // distributors first, then falling back to the full master so any valid entry still pairs up.
