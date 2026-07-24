@@ -7304,8 +7304,21 @@ function setRole(r,el){
     toast(r==="admin"?"Admin/HOD mode — all tabs enabled ✓":"Employee mode — workflow gating active ✓");
   }
 }
+function _sessionCode(){try{var s=JSON.parse(localStorage.getItem("me_em_session")||"null");return s?String(s.code||"").toUpperCase().trim():"";}catch(e){return "";}}
 function _anyPjpHodApproved(){
-  try{var all=pjpLoad();return Object.keys(all).some(function(k){var dr=all[k];return dr&&(dr.status==="HOD-Approved"||dr.status==="Approved");});}catch(e){return false;}
+  try{
+    // 1) A PJP created + HOD-approved through the in-app flow.
+    var all=pjpLoad();
+    if(Object.keys(all).some(function(k){var dr=all[k];return dr&&(dr.status==="HOD-Approved"||dr.status==="Approved");}))return true;
+    // 2) A PJP already present in the MASTER (uploaded directly by Admin/HOD, or synced) counts
+    //    as approved/available — the rep did not create it in-app, so it never had a "draft" status.
+    //    This unlocks the Plan tab in normal (non-bypass) view once the month's PJP is uploaded.
+    var m=loadMaster();var pjp=(m&&m.pjp)||[];
+    if(!pjp.length)return false;
+    var code=_sessionCode();
+    if(!code)return true; // no session context (standalone) — any uploaded PJP unlocks
+    return pjp.some(function(r){return String(r.code||"").toUpperCase().trim()===code;});
+  }catch(e){return false;}
 }
 function _anyPlanTodayDone(){
   try{var db=load();var today=todayISO();for(var k in db){var r=db[k];if(r&&r.date===today&&r.planDone)return true;}return false;}catch(e){return false;}
