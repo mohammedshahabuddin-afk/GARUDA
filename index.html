@@ -6351,9 +6351,10 @@ function eodDayData(){
   var name=elv("e_emp"),date=elv("e_date")||todayISO();var code=name?empCodeOf(name):"";
   var orders=soLoad().filter(function(o){return (o.emp===name||o.code===code)&&o.date===date;});
   var stores=nsLoad().filter(function(x){return (x.emp===name||x.code===code)&&x.date===date;});
+  var posm=(typeof reqLoad==="function"?reqLoad():[]).filter(function(r){return (r.emp===name||r.code===code)&&r.date===date;});
   var reports=load();var plan=null;
   Object.keys(reports).forEach(function(k){var x=reports[k];if((x.employee===name||x.code===code)&&x.date===date&&x.planDone)plan=x;});
-  return {name:name,code:code,date:date,orders:orders,stores:stores,plan:plan};
+  return {name:name,code:code,date:date,orders:orders,stores:stores,posm:posm,plan:plan};
 }
 
 function eodAgg(orders){
@@ -6491,28 +6492,70 @@ function eodRenderRecips(){
 
 /* ─── EOD share (bottom): full day summary + New-Outlet/Sec-Order Excel ─── */
 function eodExcelFilename(){return "EOD_"+String(elv("e_emp")||"Emp").replace(/[^\w]+/g,"_")+"_"+ddmmyy(elv("e_date")||todayISO())+".xlsx";}
+// Manager columns (from Employees master) appended to every EOD sheet — order ZM → RSM → ASM.
+var EOD_MGR_HEAD=["ZM Name","ZM Email","RSM Name","RSM Email","ASM Name","ASM Email"];
+function eodMgrCols(empName){var e=empObj(empName)||{};var g=function(m){m=m||{};return [m.name||"",m.email||""];};return g(e.zm).concat(g(e.rsm),g(e.asm));}
+// Epoch (ms) parsed from a record id like "SO_1690000000000" — reliable chronological sort key.
+function eodEpoch(id){var m=String(id||"").match(/_(\d+)/);return m?parseInt(m[1],10):0;}
 function eodBuildDayWorkbook(){
   if(typeof XLSX==="undefined")return null;
   var D=eodDayData();var wb=XLSX.utils.book_new();
-  var soHead=["Date","Emp Code","Employee","Store","Store Type","City","Company Code","Distributor Code","Distributor Name","Status","SKU Code","SKU Name","Brand","Category","MRP","Units","Value(Rs)"];
+
+  // ── DFR TIMELINE (first sheet): every activity merged, sorted by timestamp ──
+  var dfrHead=["Time","Type","Emp Code","Employee","Store","Store Type","City","Company Code","Distributor Code","Distributor Name","Detail"].concat(EOD_MGR_HEAD);
+  var acts=[];
+  (D.orders||[]).forEach(function(o){
+    var units=0,val=0;(o.lines||[]).forEach(function(l){units+=num(l.units);val+=num(l.value);});
+    var detail=(o.status==="No Order"||!(o.lines&&o.lines.length))?("No Order"+(o.cancelReason?(" — "+o.cancelReason):"")):(units+" units · ₹"+val+" · "+(o.status||""));
+    acts.push({k:eodEpoch(o.id),ts:o.ts||"",emp:o.emp,row:["Sec Order",o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,detail]});
+  });
+  (D.stores||[]).forEach(function(s){
+    acts.push({k:eodEpoch(s.id),ts:s.ts||"",emp:s.emp,row:["New Store",s.code,s.emp,s.storeName,s.type,s.town||s.city||"","",s.dbCode,s.dbName,"New outlet — "+(s.category||"")+(s.reason?(" · "+s.reason):"")]});
+  });
+  (D.posm||[]).forEach(function(r){
+    acts.push({k:eodEpoch(r.id),ts:r.ts||"",emp:r.emp,row:["POSM Req",r.code,r.emp,r.storeName,r.storeType,r.city,r.companyCode,r.dbCode,r.dbName,"POSM Required: "+(r.requirement||"")+(r.remarks?(" · "+r.remarks):"")]});
+  });
+  acts.sort(function(a,b){return a.k-b.k;});
+  var dfrRows=[dfrHead];
+  acts.forEach(function(a){dfrRows.push([a.ts].concat(a.row).concat(eodMgrCols(a.emp)));});
+  var dfrWs=XLSX.utils.aoa_to_sheet(dfrRows);
+  eodColsToText(dfrWs,[7,8]);
+  XLSX.utils.book_append_sheet(wb,dfrWs,"DFR");
+
+  // ── Sec Orders (line-wise) ──
+  var soHead=["Date","Emp Code","Employee","Store","Store Type","City","Company Code","Distributor Code","Distributor Name","Status","SKU Code","SKU Name","Brand","Category","MRP","Units","Value(Rs)"].concat(EOD_MGR_HEAD);
   var soRows=[soHead];
   (D.orders||[]).forEach(function(o){
-    if(o.lines&&o.lines.length){o.lines.forEach(function(l){soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status,l.code,l.name,l.brand,l.category,num(l.mrp),num(l.units),num(l.value)]);});}
-    else{soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status||"No Order","","","","","","",""]);}
+    var mg=eodMgrCols(o.emp);
+    if(o.lines&&o.lines.length){o.lines.forEach(function(l){soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status,l.code,l.name,l.brand,l.category,num(l.mrp),num(l.units),num(l.value)].concat(mg));});}
+    else{soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status||"No Order","","","","","","",""].concat(mg));}
   });
   var soWs=XLSX.utils.aoa_to_sheet(soRows);
   // Long numeric-looking codes must be TEXT, else Excel truncates / shows scientific notation.
   // Sec Orders cols: Company Code(6), Distributor Code(7), SKU Code(10).
   eodColsToText(soWs,[6,7,10]);
   XLSX.utils.book_append_sheet(wb,soWs,"Sec Orders");
+
+  // ── New Stores ──
   if((D.stores||[]).length){
-    var nsHead=["Date","Emp Code","Employee","Store Name","Type","Distributor Code","Distributor Name","State","Town","Address","Pincode","Beat","Category","Owner","Owner Mobile","Reason","Status"];
+    var nsHead=["Date","Emp Code","Employee","Store Name","Type","Distributor Code","Distributor Name","State","Town","Address","Pincode","Beat","Category","Owner","Owner Mobile","Reason","Status"].concat(EOD_MGR_HEAD);
     var nsRows=[nsHead];
-    D.stores.forEach(function(s){nsRows.push([ddmmyy(s.date),s.code,s.emp,s.storeName,s.type,s.dbCode,s.dbName,s.state,s.town,s.address,s.pincode,s.beat,s.category,s.owner,s.ownerMob,s.reason,s.status]);});
+    D.stores.forEach(function(s){nsRows.push([ddmmyy(s.date),s.code,s.emp,s.storeName,s.type,s.dbCode,s.dbName,s.state,s.town,s.address,s.pincode,s.beat,s.category,s.owner,s.ownerMob,s.reason,s.status].concat(eodMgrCols(s.emp)));});
     var nsWs=XLSX.utils.aoa_to_sheet(nsRows);
     // New Stores cols: Distributor Code(5), Pincode(10), Owner Mobile(14).
     eodColsToText(nsWs,[5,10,14]);
     XLSX.utils.book_append_sheet(wb,nsWs,"New Stores");
+  }
+
+  // ── POSM Requirement (stores that need POSM) ──
+  if((D.posm||[]).length){
+    var pqHead=["Date","Emp Code","Employee","Store","Store Type","City","State","Company Code","Distributor Code","Distributor Name","POSM Required","Remarks"].concat(EOD_MGR_HEAD);
+    var pqRows=[pqHead];
+    D.posm.forEach(function(r){pqRows.push([ddmmyy(r.date),r.code,r.emp,r.storeName,r.storeType,r.city,r.state,r.companyCode,r.dbCode,r.dbName,r.requirement,r.remarks].concat(eodMgrCols(r.emp)));});
+    var pqWs=XLSX.utils.aoa_to_sheet(pqRows);
+    // POSM cols: Company Code(7), Distributor Code(8).
+    eodColsToText(pqWs,[7,8]);
+    XLSX.utils.book_append_sheet(wb,pqWs,"POSM Requirement");
   }
   return wb;
 }
@@ -6528,7 +6571,7 @@ function eodColsToText(ws,cols){
     });
   }
 }
-function eodHasData(){var D=eodDayData();return !!((D.orders&&D.orders.length)||(D.stores&&D.stores.length));}
+function eodHasData(){var D=eodDayData();return !!((D.orders&&D.orders.length)||(D.stores&&D.stores.length)||(D.posm&&D.posm.length));}
 function eodDownloadExcel(){var wb=eodBuildDayWorkbook();if(!wb){toast("Excel tool not loaded");return false;}try{XLSX.writeFile(wb,eodExcelFilename());return true;}catch(e){toast("Excel failed");return false;}}
 function eodDaySummaryTextFull(){
   var D=eodDayData();var A=eodAgg(D.orders);
@@ -6606,9 +6649,9 @@ function eodSendWhatsApp(){eodShareAll("wa");}
 function eodSendGmail(){eodShareAll("mail");}
 function eodRenderShareBottom(){
   var box=document.getElementById("eod-out");if(!box)return;
-  var D=eodDayData();var A=eodAgg(D.orders);var placed=A.placed.length,ns=(D.stores||[]).length;
+  var D=eodDayData();var A=eodAgg(D.orders);var placed=A.placed.length,ns=(D.stores||[]).length,pq=(D.posm||[]).length;
   var h='<div class="card" style="margin-top:13px;border-left:4px solid #2f9e57"><h2><span class="dot"></span>📤 Send Day Report</h2>';
-  h+='<div class="note" style="margin:0 0 10px">Summary ki <b>image</b>'+((placed||ns)?(' + <b>Excel</b> ('+placed+' sec order · '+ns+' naye outlet)'):'')+' attach hokar jayegi.</div>';
+  h+='<div class="note" style="margin:0 0 10px">Summary ki <b>image</b>'+((placed||ns||pq)?(' + <b>Excel</b> ('+placed+' sec order · '+ns+' naye outlet · '+pq+' POSM req)'):'')+' attach hokar jayegi. <span class="hint">Excel me DFR (timeline), Sec Orders, New Stores &amp; POSM Requirement tabs — sab me ZM/RSM/ASM ke naam+email.</span></div>';
   h+='<div class="row2"><button class="btn btn-wa" onclick="eodSendWhatsApp()">🟢 Send on WhatsApp</button><button class="btn btn-navy" onclick="eodSendGmail()">📧 Send on Gmail</button></div>';
   if(eodHasData())h+='<button class="btn btn-ghost small" style="margin-top:8px" onclick="eodDownloadExcel()">📊 Download Excel</button>';
   h+='<div class="hint" style="margin:8px 0 0">📱 Phone par: share sheet khulega → WhatsApp/Gmail chuno, image + Excel apne aap attach. 💻 Laptop par: image + Excel download honge — attach kar do.</div>';
