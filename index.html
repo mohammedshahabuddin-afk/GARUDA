@@ -4731,7 +4731,9 @@ function secEditPanel(r){
         +'</div>';
     });
   }else h+='<div class="note" style="margin:0 0 6px">Koi SKU nahi (No Order / Cancel).</div>';
-  h+='<button class="btn btn-ghost small" onclick="ffEdit(\''+r.id+'\')">\u2795 Add / change products (Field)</button>';
+  // Two buttons together: Add/Change Product opens the Field tab; Save updates the order
+  // in-place (quantity edits) WITHOUT redirecting \u2014 faster editing.
+  h+='<div class="row2" style="margin-top:2px"><button class="btn btn-ghost small" onclick="ffEdit(\''+r.id+'\')">\u2795 Add / Change Product (Field)</button><button class="btn btn-navy small" onclick="secEditDone(\''+r.id+'\')">\ud83d\udcbe Save</button></div>';
   h+='<label class="hint" style="margin-top:8px">Status</label><select onchange="secEditStatus(\''+r.id+'\',this.value)">'+st.map(function(s){return '<option'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join("")+'</select>';
   h+='<label class="hint" style="margin-top:8px">Reason <span class="hint">(No Order / Cancel ke liye)</span></label><input type="text" value="'+escAttr(r.cancelReason||"")+'" onchange="secEditReason(\''+r.id+'\',this.value)" placeholder="Reason">';
   h+='<label class="hint" style="margin-top:8px">Remarks</label><textarea rows="2" style="width:100%;box-sizing:border-box;resize:vertical" onchange="secEditRemarks(\''+r.id+'\',this.value)" placeholder="Remarks">'+escapeHtml(r.remarks||"")+'</textarea>';
