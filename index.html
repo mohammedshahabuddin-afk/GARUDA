@@ -3459,7 +3459,7 @@ function renderSoTracker(){
   });
   box.innerHTML=h;
 }
-function soSetStatus(id,v){var l=soLoad();for(var i=0;i<l.length;i++)if(l[i].id===id){l[i].status=v;break;}soSave(l);renderSoTracker();}
+function soSetStatus(id,v){var l=soLoad();for(var i=0;i<l.length;i++)if(l[i].id===id){l[i].status=v;if(v==="Billing Done"&&!l[i].deliveredTs)l[i].deliveredTs=nowTime();l[i].statusTs=nowTime();break;}soSave(l);renderSoTracker();}
 function soSetReason(id,v){var l=soLoad();for(var i=0;i<l.length;i++)if(l[i].id===id){l[i].cancelReason=v;break;}soSave(l);}
 function soSetRemarks(id,v){var l=soLoad();for(var i=0;i<l.length;i++)if(l[i].id===id){l[i].remarks=v;break;}soSave(l);}
 function soWorkbook(){
@@ -4937,7 +4937,7 @@ function secEditClose(){window._secEditId=null;renderFfList();}
 function secEditUnits(id,i,v){soUpdate(id,function(r){if(r.lines&&r.lines[i]){r.lines[i].units=num(v);r.lines[i].value=num(v)*num(r.lines[i].mrp);}});renderFfList();}
 function secEditValue(id,i,v){soUpdate(id,function(r){if(r.lines&&r.lines[i])r.lines[i].value=num(v);});renderFfList();}
 function secEditRemoveLine(id,i){soUpdate(id,function(r){if(r.lines)r.lines.splice(i,1);});renderFfList();}
-function secEditStatus(id,v){soUpdate(id,function(r){r.status=v;});renderFfList();}
+function secEditStatus(id,v){soUpdate(id,function(r){r.status=v;if(v==="Billing Done"&&!r.deliveredTs)r.deliveredTs=nowTime();r.statusTs=nowTime();});renderFfList();}
 function secEditReason(id,v){soUpdate(id,function(r){r.cancelReason=v;});}
 function secEditRemarks(id,v){soUpdate(id,function(r){r.remarks=v;});}
 function secEditDone(id){
@@ -6407,39 +6407,51 @@ function eodTile(val,label,sub,color){
     +(sub?('<div style="font-size:9.5px;color:#8a968f;margin-top:1px">'+sub+'</div>'):'')+'</div>';
 }
 function eodSummaryInnerHtml(D,A){
-  var plan=D.plan||{};
+  var plan=D.plan||{};var e=escapeHtml;
   var C=eodCalls(D,A);
-  var delPct=A.placed.length?Math.round(A.delivered.length/A.placed.length*100):0;
-  var pq=(D.posm||[]).length;
-  var tiles='<div style="display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 4px">'
-    +eodTile(C.tc,"Visits","target "+C.sc)
-    +eodTile(C.pc,"With Order","productive","#2f9e57")
-    +eodTile("₹"+eodF(A.totNsv)+"L","Secondary","NSV","#b4432f")
-    +eodTile(A.delivered.length,"Delivered",delPct+"% billed")
-    +eodTile(D.stores.length,"New Stores","opened")
-    +eodTile(pq,"POSM Req","stores")
+  // ── KPI chips (achieved · vs plan) — plan-card style ──
+  var nsoDone=(D.stores||[]).length,nsoTgt=num(plan.nsoPlan)||(plan.tgt&&num(plan.tgt.nso))||0;
+  var chip=function(v,sub,lbl,color){return '<div style="flex:1;background:#f0f6f1;border-radius:10px;padding:9px 4px;text-align:center"><div style="font-size:19px;font-weight:800;color:'+(color||"#0f2e1d")+'">'+v+'</div><div style="font-size:9px;color:#7a8b7e">'+sub+'</div><div style="font-size:10.5px;color:#5a6b5e;font-weight:700;margin-top:2px">'+lbl+'</div></div>';};
+  var chips='<div style="display:flex;gap:7px;margin:2px 0 12px">'
+    +chip(C.tc,"of "+C.sc+" plan","Calls")
+    +chip(A.placed.length+" / "+A.delivered.length,"placed / billed","Orders","#2f9e57")
+    +chip(nsoDone+(nsoTgt?(" / "+nsoTgt):""),"opened","New Stores")
     +'</div>';
-  // Beat/Town only here — Calls/Orders/New Stores counts already shown in the KPI tiles (no dup).
-  var s1=eodKV("Beat / Town",escapeHtml((plan.beat||"-")+" / "+(plan.town||"-")))
-    +(plan.focus?eodKV("Focus",escapeHtml(plan.focus)):"");
-  // Order vs Deliver — adds unit + ₹ + pending detail beyond the tiles.
-  var s2=eodKV("Placed",A.placed.length+" · "+A.totUnits+"u · ₹"+eodF(A.totNsv)+"L")
-    +eodKV("Delivered (Billed)",A.delivered.length+" · "+A.delUnits+"u · ₹"+eodF(A.delNsv)+"L")
-    +eodKV("Pending (in process)",A.pending.length+" · "+(A.totUnits-A.delUnits)+"u · ₹"+eodF(A.totNsv-A.delNsv)+"L")
-    +eodKV("No Order / Cancel",String(A.noorder.length));
-  var bk=Object.keys(A.brand).sort(function(a,b){return A.brand[b].n-A.brand[a].n;});
-  var s3=bk.length?bk.map(function(b){return eodKV(escapeHtml(b),A.brand[b].u+"u · ₹"+eodF(A.brand[b].n)+"L");}).join(""):'<div style="font-size:12px;color:#8a968f">No order lines.</div>';
-  function cellTxt(c){return c.u+"u/₹"+eodF(c.n)+"L";}
-  var s4="";["MEGA BA","BA Store"].forEach(function(st){var c=A.cell[st];if(c.msl.u+c.non.u===0)return;s4+=eodKV(st,"MSL "+cellTxt(c.msl)+" | Non-MSL "+cellTxt(c.non));});
-  if(!s4)s4='<div style="font-size:12px;color:#8a968f">No order lines.</div>';
-  var s5="";["MEGA BA","BA Store"].forEach(function(st){var bb=A.stBrand[st];var ks=Object.keys(bb).sort(function(a,b){return bb[b].n-bb[a].n;});if(!ks.length)return;s5+='<div style="font-size:11.5px;font-weight:800;color:#44504a;margin:5px 0 2px">'+st+'</div>';ks.forEach(function(b){s5+=eodKV("&nbsp;&nbsp;"+escapeHtml(b),bb[b].u+"u · ₹"+eodF(bb[b].n)+"L");});});
-  if(!s5)s5='<div style="font-size:12px;color:#8a968f">No order lines.</div>';
-  return tiles
-    +eodSec("Plan (Beat / Town)",s1)
-    +eodSec("Order vs Deliver",s2)
-    +eodSec("Brand Summary",s3)
-    +eodSec("Mega BA & BA — MSL vs Non-MSL",s4)
-    +eodSec("Mega BA & BA — Brand-wise",s5);
+  // ── Order Target vs Achievement (₹L) — the table the user asked for ──
+  var tgt=plan.tgt||null;
+  var TG={TDC:tgt?num(tgt.tdc):0.90,BB:tgt?num(tgt.BB):0.25,AQ:tgt?num(tgt.AQ):0.15,DRS:tgt?num(tgt.DRS):0.10,CC:tgt?num(tgt.CC):0.10};
+  var totTgt=tgt?num(tgt.totalDay):1.50;
+  var alias={TDC:["tdc","derma"],BB:["bb","bblunt"],AQ:["aq","aqualog"],DRS:["drs","sheth"],CC:["cc","color"]};
+  var ach={TDC:0,BB:0,AQ:0,DRS:0,CC:0};
+  Object.keys(A.brand).forEach(function(k){var lk=String(k).toLowerCase();["TDC","BB","AQ","DRS","CC"].some(function(t){if(lk===t.toLowerCase()||alias[t].some(function(a){return lk.indexOf(a)>=0;})){ach[t]+=A.brand[k].n;return true;}return false;});});
+  var totAch=ach.TDC+ach.BB+ach.AQ+ach.DRS+ach.CC;
+  var labels={TDC:"The Derma Co. (TDC)",BB:"BBlunt (BB)",AQ:"Aqualogica (AQ)",DRS:"Dr. Sheth's (DRS)",CC:"ME Color Care (CC)"};
+  var trow=function(lbl,tg,ac,bold){var pct=tg>0?Math.round(ac/tg*100):0;var col=pct>=100?"#1a7a3f":(pct>=60?"#b8860b":"#b4432f");
+    return '<tr'+(bold?' style="background:#0f2e1d;color:#fff"':'')+'>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #eef2ee'+(bold?';color:#fff;font-weight:800':'')+'">'+lbl+'</td>'
+      +'<td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eef2ee'+(bold?';color:#fff':'')+'">'+eodF(tg)+'</td>'
+      +'<td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eef2ee;font-weight:700'+(bold?';color:#fff':'')+'">'+eodF(ac)+'</td>'
+      +'<td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eef2ee;font-weight:800;color:'+(bold?'#fff':col)+'">'+pct+'%</td></tr>';};
+  var tbl='<div style="font-size:13px;font-weight:800;color:#0f2e1d;margin-bottom:5px">📊 Order Target vs Achievement <span style="font-size:11px;color:#7a8b7e;font-weight:600">(₹L)</span></div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #e3ece5;border-radius:9px;overflow:hidden">'
+    +'<tr style="background:#eef5ef;font-size:11px;color:#44504a;font-weight:800"><td style="padding:6px 10px">Brand</td><td style="padding:6px 8px;text-align:right">Target</td><td style="padding:6px 8px;text-align:right">Achieved</td><td style="padding:6px 8px;text-align:right">%</td></tr>'
+    +["TDC","BB","AQ","DRS","CC"].map(function(t){return trow(labels[t],TG[t],ach[t],false);}).join("")
+    +trow("TOTAL / DAY",totTgt,totAch,true)
+    +'</table>';
+  // ── Order Status (live — updates as orders get billed / in-process, with delivery time) ──
+  var sumVal=function(arr){var n=0;arr.forEach(function(o){(o.lines||[]).forEach(function(l){n+=(+l.value||0);});});return n/1e5;};
+  var statusRow=function(lbl,arr,color){return '<div style="display:flex;justify-content:space-between;padding:5px 10px;border-bottom:1px solid #eef2ee;font-size:12px"><span style="color:'+color+';font-weight:700">'+lbl+'</span><span><b>'+arr.length+'</b> · ₹'+eodF(sumVal(arr))+'L</span></div>';};
+  var stTbl='<div style="font-size:13px;font-weight:800;color:#0f2e1d;margin:14px 0 5px">🧾 Order Status</div>'
+    +'<div style="border:1px solid #e3ece5;border-radius:9px;overflow:hidden">'
+    +statusRow("✅ Delivered (Billed)",A.delivered,"#1a7a3f")
+    +statusRow("⏳ In-Process",A.pending,"#2a4d8f")
+    +statusRow("🚫 No Order / Cancel",A.noorder,"#b4432f")
+    +'</div>';
+  var delList="";
+  A.delivered.forEach(function(o){delList+='<div style="display:flex;justify-content:space-between;padding:3px 10px;font-size:11px;color:#44504a"><span>'+e(o.storeName||"")+'</span><span style="color:#1a7a3f;font-weight:700">✅ '+e(o.deliveredTs||o.statusTs||o.ts||"")+'</span></div>';});
+  if(delList)stTbl+='<div style="margin-top:5px;background:#f4faf6;border:1px solid #e3ece5;border-radius:9px;padding:5px 0"><div style="font-size:10.5px;font-weight:800;color:#1a7a3f;padding:2px 10px">Delivered — kab hua</div>'+delList+'</div>';
+  var beat='<div style="font-size:12px;color:#5a6b5e;margin:0 0 10px"><b>Beat/Town:</b> '+e((plan.beat||"-")+" / "+(plan.town||"-"))+(plan.focus?(' &nbsp;·&nbsp; <b>Focus:</b> '+e(plan.focus)):'')+'</div>';
+  return beat+chips+tbl+stTbl;
 }
 
 function eodSummaryText(D,A){
@@ -6693,12 +6705,22 @@ function eodRenderShareBottom(){
 }
 
 function buildEodSummaryCardEl(){
-  var D=eodDayData();var A=eodAgg(D.orders);
+  var D=eodDayData();var A=eodAgg(D.orders);var e=escapeHtml;
+  var m=loadMaster();var grp=(m&&m.config&&m.config.Group_Name)?m.config.Group_Name:"";
+  var lg=document.querySelector(".hd-logo");var logoSrc=lg?lg.src:"";
   var d=document.createElement("div");
-  d.style.cssText="position:fixed;left:-9999px;top:0;width:390px;background:#fff;padding:16px;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1f2a24";
-  d.innerHTML='<div style="font-weight:800;font-size:15px;color:#2c5f2d;margin-bottom:2px">🌙 EOD Day Summary</div>'
-    +'<div style="font-size:12px;color:#5b6b64;margin-bottom:4px">'+escapeHtml(D.name||"")+' · '+ddmmyy(D.date)+'</div>'
-    +eodSummaryInnerHtml(D,A);
+  d.style.cssText="position:fixed;left:-9999px;top:0;width:520px;background:#fff;font-family:'Segoe UI',Roboto,Arial,sans-serif;color:#1a2b1e;box-sizing:border-box;border:1px solid #e3ece5;border-radius:14px;overflow:hidden";
+  // Green header bar — same design language as the Today Plan card.
+  d.innerHTML='<div style="background:#0f2e1d;color:#fff;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px">'
+      +'<div style="display:flex;align-items:center;gap:12px">'+(logoSrc?'<img src="'+logoSrc+'" style="height:38px;background:#fff;border-radius:8px;padding:3px 6px">':'')
+      +'<div><div style="font-size:16px;font-weight:800;letter-spacing:.3px">Honasa Consumer Limited</div><div style="font-size:14px;font-weight:800">Emerging Brand · EOD Day Report</div></div></div>'
+      +'<div style="text-align:right;line-height:1.45"><div style="font-size:13px;font-weight:800">'+ddmmyy(D.date)+'</div><div style="font-size:11px;color:#cfe6d6">'+nowTime()+'</div></div></div>'
+    +'<div style="padding:15px 18px 17px">'
+      +'<div style="font-size:19px;font-weight:800;color:#0f2e1d">'+e(D.name||"")+' <span style="font-size:13px;color:#7a8b7e;font-weight:600">('+e(D.code||"")+')</span></div>'
+      +'<div style="font-size:12.5px;color:#5a6b5e;margin:2px 0 11px">'+ddmmyy(D.date)+'</div>'
+      +eodSummaryInnerHtml(D,A)
+      +'<div style="margin-top:13px;border-top:1px dashed #cfe0d4;padding-top:7px;font-size:11px;color:#8a9b8e">'+e(grp)+' · EOD Day Report · '+ddmmyy(D.date)+'</div>'
+    +'</div>';
   return d;
 }
 function eodShareImage(){
