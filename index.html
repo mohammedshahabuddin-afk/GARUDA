@@ -6500,14 +6500,33 @@ function eodBuildDayWorkbook(){
     if(o.lines&&o.lines.length){o.lines.forEach(function(l){soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status,l.code,l.name,l.brand,l.category,num(l.mrp),num(l.units),num(l.value)]);});}
     else{soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status||"No Order","","","","","","",""]);}
   });
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(soRows),"Sec Orders");
+  var soWs=XLSX.utils.aoa_to_sheet(soRows);
+  // Long numeric-looking codes must be TEXT, else Excel truncates / shows scientific notation.
+  // Sec Orders cols: Company Code(6), Distributor Code(7), SKU Code(10).
+  eodColsToText(soWs,[6,7,10]);
+  XLSX.utils.book_append_sheet(wb,soWs,"Sec Orders");
   if((D.stores||[]).length){
     var nsHead=["Date","Emp Code","Employee","Store Name","Type","Distributor Code","Distributor Name","State","Town","Address","Pincode","Beat","Category","Owner","Owner Mobile","Reason","Status"];
     var nsRows=[nsHead];
     D.stores.forEach(function(s){nsRows.push([ddmmyy(s.date),s.code,s.emp,s.storeName,s.type,s.dbCode,s.dbName,s.state,s.town,s.address,s.pincode,s.beat,s.category,s.owner,s.ownerMob,s.reason,s.status]);});
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(nsRows),"New Stores");
+    var nsWs=XLSX.utils.aoa_to_sheet(nsRows);
+    // New Stores cols: Distributor Code(5), Pincode(10), Owner Mobile(14).
+    eodColsToText(nsWs,[5,10,14]);
+    XLSX.utils.book_append_sheet(wb,nsWs,"New Stores");
   }
   return wb;
+}
+// Force the given column indexes (0-based, skipping the header row) to TEXT cells so long
+// codes (SKU/barcode, company/distributor code, pincode, mobile) are never truncated by Excel.
+function eodColsToText(ws,cols){
+  if(!ws||!ws["!ref"]||typeof XLSX==="undefined")return;
+  var range=XLSX.utils.decode_range(ws["!ref"]);
+  for(var R=range.s.r+1;R<=range.e.r;R++){
+    cols.forEach(function(C){
+      var addr=XLSX.utils.encode_cell({r:R,c:C});var cell=ws[addr];
+      if(cell&&cell.v!=null&&cell.v!==""){cell.t="s";cell.v=String(cell.v);cell.z="@";}
+    });
+  }
 }
 function eodHasData(){var D=eodDayData();return !!((D.orders&&D.orders.length)||(D.stores&&D.stores.length));}
 function eodDownloadExcel(){var wb=eodBuildDayWorkbook();if(!wb){toast("Excel tool not loaded");return false;}try{XLSX.writeFile(wb,eodExcelFilename());return true;}catch(e){toast("Excel failed");return false;}}
@@ -6528,30 +6547,74 @@ function eodShareViaFile(txt){
   }catch(e){}
   return false;
 }
-function eodSendWhatsApp(){
-  var txt=eodDaySummaryTextFull();window._lastEodMsg=txt;
-  if(eodShareViaFile(txt))return;
-  if(eodHasData()){eodDownloadExcel();toast("📊 Excel download hua — WhatsApp me attach karo");}
-  var rs=eodRecips();var mob=(rs[0]&&rs[0].mob)?rs[0].mob:"";
-  var n=String(mob||"").replace(/\D/g,"");if(n.length===10)n="91"+n;
-  window.open("https://wa.me/"+n+"?text="+encodeURIComponent(txt),"_blank");
+// Build the Excel as a File (for sharing) — same workbook as the download.
+function eodBuildExcelFile(){
+  if(typeof XLSX==="undefined")return null;
+  var wb=eodBuildDayWorkbook();if(!wb)return null;
+  try{var wbout=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    return new File([new Uint8Array(wbout)],eodExcelFilename(),{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});}
+  catch(e){return null;}
 }
-function eodSendGmail(){
-  var txt=eodDaySummaryTextFull();window._lastEodMsg=txt;
-  var rs=eodRecips();var to=rs.filter(function(r){return r.email;}).map(function(r){return r.email;}).join(",");
-  var sub="EOD Day Summary — "+(elv("e_emp")||"")+" — "+ddmmyy(elv("e_date")||todayISO());
-  if(eodHasData()){eodDownloadExcel();toast("📊 Excel download hua — Gmail me attach karo");}
-  window.open("https://mail.google.com/mail/?view=cm&fs=1"+(to?("&to="+encodeURIComponent(to)):"")+"&su="+encodeURIComponent(sub)+"&body="+encodeURIComponent(txt),"_blank");
+// Render the summary card to a PNG File (same image used for WhatsApp image share).
+function eodBuildImageFileAsync(){
+  return new Promise(function(resolve){
+    if(typeof html2canvas==="undefined"){resolve(null);return;}
+    var card;try{card=buildEodSummaryCardEl();document.body.appendChild(card);}catch(e){resolve(null);return;}
+    html2canvas(card,{scale:2,backgroundColor:"#ffffff",useCORS:true,logging:false}).then(function(canvas){
+      if(card.parentNode)card.parentNode.removeChild(card);
+      canvas.toBlob(function(blob){resolve(blob?new File([blob],"eod-summary.png",{type:"image/png"}):null);},"image/png");
+    }).catch(function(){if(card&&card.parentNode)card.parentNode.removeChild(card);resolve(null);});
+  });
 }
+function eodDownloadFile(file){try{var url=URL.createObjectURL(file);var a=document.createElement("a");a.href=url;a.download=file.name;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},5000);}catch(e){}}
+// Pre-build the summary IMAGE (async) as soon as the share card shows, so the actual Send click
+// stays synchronous — navigator.share / window.open only work inside the user's tap gesture.
+var _eodShareCache={img:null,key:null};
+function eodPrepShareFiles(){
+  var key=(elv("e_emp")||"")+"|"+(elv("e_date")||"");
+  _eodShareCache={img:null,key:key};
+  eodBuildImageFileAsync().then(function(img){if(_eodShareCache.key===key)_eodShareCache.img=img;});
+}
+// Unified send (SYNC — runs in the tap gesture): attach summary IMAGE + EXCEL to WhatsApp / Gmail.
+// Mobile → one OS share sheet with both files + text. Desktop → download files + open channel w/ text.
+function eodShareAll(channel){
+  if(!window._lastEodDate){toast("Employee & date select karein");return;}
+  var txt=eodDaySummaryTextFull();window._lastEodMsg=txt;
+  var files=[];
+  if(_eodShareCache.img)files.push(_eodShareCache.img);          // pre-rendered image (if ready)
+  var xls=null;try{if(eodHasData())xls=eodBuildExcelFile();}catch(e){}   // Excel builds fast, in-gesture
+  if(xls)files.push(xls);
+  // Preferred path (mobile): OS share sheet with image + Excel + text together.
+  if(files.length&&navigator.canShare){
+    try{if(navigator.canShare({files:files})){navigator.share({files:files,text:txt,title:"EOD Day Report"}).catch(function(){});return;}}catch(e){}
+  }
+  // Desktop fallback: download the files (attach manually) + open the channel with the text.
+  if(_eodShareCache.img)eodDownloadFile(_eodShareCache.img);
+  if(xls)eodDownloadFile(xls);
+  if(_eodShareCache.img||xls)toast("📥 Image"+(xls?" + Excel":"")+" download ho gaye — "+(channel==="mail"?"Gmail":"WhatsApp")+" me attach kar do");
+  if(channel==="mail"){
+    var rs=eodRecips();var to=rs.filter(function(r){return r.email;}).map(function(r){return r.email;}).join(",");
+    var sub="EOD Day Summary — "+(elv("e_emp")||"")+" — "+ddmmyy(elv("e_date")||todayISO());
+    window.open("https://mail.google.com/mail/?view=cm&fs=1"+(to?("&to="+encodeURIComponent(to)):"")+"&su="+encodeURIComponent(sub)+"&body="+encodeURIComponent(txt),"_blank");
+  }else{
+    var rs2=eodRecips();var mob=(rs2[0]&&rs2[0].mob)?rs2[0].mob:"";
+    var n=String(mob||"").replace(/\D/g,"");if(n.length===10)n="91"+n;
+    window.open("https://wa.me/"+n+"?text="+encodeURIComponent(txt),"_blank");
+  }
+}
+function eodSendWhatsApp(){eodShareAll("wa");}
+function eodSendGmail(){eodShareAll("mail");}
 function eodRenderShareBottom(){
   var box=document.getElementById("eod-out");if(!box)return;
   var D=eodDayData();var A=eodAgg(D.orders);var placed=A.placed.length,ns=(D.stores||[]).length;
   var h='<div class="card" style="margin-top:13px;border-left:4px solid #2f9e57"><h2><span class="dot"></span>📤 Send Day Report</h2>';
-  h+='<div class="note" style="margin:0 0 10px">Poore din ka summary jayega. '+((placed||ns)?('<b>'+placed+'</b> sec order · <b>'+ns+'</b> naye outlet — inki <b>Excel</b> bhi saath (manager designated app me punch kar sake).'):'Aaj koi order / outlet nahi bana.')+'</div>';
+  h+='<div class="note" style="margin:0 0 10px">Summary ki <b>image</b>'+((placed||ns)?(' + <b>Excel</b> ('+placed+' sec order · '+ns+' naye outlet)'):'')+' attach hokar jayegi.</div>';
   h+='<div class="row2"><button class="btn btn-wa" onclick="eodSendWhatsApp()">🟢 Send on WhatsApp</button><button class="btn btn-navy" onclick="eodSendGmail()">📧 Send on Gmail</button></div>';
   if(eodHasData())h+='<button class="btn btn-ghost small" style="margin-top:8px" onclick="eodDownloadExcel()">📊 Download Excel</button>';
+  h+='<div class="hint" style="margin:8px 0 0">📱 Phone par: share sheet khulega → WhatsApp/Gmail chuno, image + Excel apne aap attach. 💻 Laptop par: image + Excel download honge — attach kar do.</div>';
   h+='<div class="hint" style="margin:10px 0 4px">Recipients (HOD / ZM / RSM / ASM):</div><div id="eod_ds_recips"></div>';
   h+='</div>';box.innerHTML=h;eodRenderRecips();
+  try{eodPrepShareFiles();}catch(e){}   // warm the summary image so Send stays in-gesture
 }
 
 function buildEodSummaryCardEl(){
