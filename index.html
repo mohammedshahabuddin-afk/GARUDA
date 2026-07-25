@@ -657,10 +657,16 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <div class="note" style="margin:0">⚠️ Master not loaded — open <b>Data → Upload Master Excel</b>.</div>
     </div>
 
+    <!-- Always-visible: today's PJP straight from the loaded master (independent of Working-With flow) -->
+    <div class="card" id="p_today_pjp_card" style="border-left:4px solid #0f2e1d;background:linear-gradient(90deg,#f0fdf4,#fff)">
+      <h2><span class="dot"></span>📅 Today's Beat Plan (PJP)</h2>
+      <div id="p_today_pjp_out" class="note" style="margin:0">Employee &amp; date select karo…</div>
+    </div>
+
     <div class="card">
       <h2><span class="dot"></span>Who &amp; Where</h2>
       <label>Date</label>
-      <input type="date" id="p_date">
+      <input type="date" id="p_date" onchange="try{renderTodayPjp();}catch(e){}">
 
       <label>Emerging Employee <span class="hint">(pick any one — others auto-fill)</span></label>
       <div class="row3">
@@ -2167,6 +2173,7 @@ function go(v,el){
   window.scrollTo(0,0);
   if(v==="sum"){if(typeof renderOverview==="function")renderOverview();if(typeof updateApprBadge==="function")updateApprBadge();}
   if(v==="pjp")pjpRefresh();
+  if(v==="plan"){try{renderTodayPjp();}catch(e){}}
   if(v==="field"){syncFieldFromPlan();fieldRefresh();}
   if(v==="eod")prefillEod();
   if(v==="data"){renderCityApprovals();renderPjpAdmin();renderNsTracker();renderSoTracker();if(typeof _pptFillEmpDropdown==="function")_pptFillEmpDropdown();if(typeof tadaInit==="function")tadaInit();try{if(typeof dlFillEmpDropdown==="function")dlFillEmpDropdown();}catch(e){}try{if(typeof dlUpdateSummary==="function")dlUpdateSummary();}catch(e){}}
@@ -2338,12 +2345,41 @@ function empResolve(source){
     "<span>Zone: <b>"+emp.zone+"</b></span><span>HQ: <b>"+emp.hq+"</b></span></div>"+
     "<div style='margin-top:3px;color:#8a96a3'>\uD83D\uDCF1 "+(emp.mob||"-")+" \u00b7 \u2709\uFE0F "+(emp.email||"-")+"</div>";
   planRefresh();
+  try{renderTodayPjp();}catch(e){}
 }
 function pjpRows(code){var m=loadMaster();return (m.pjp||[]).filter(function(p){return p.code===code;});}
 // Normalize any date to ISO YYYY-MM-DD (handles ISO already, or DD-MM-YYYY / DD/MM/YYYY) so PJP
 // rows match the <input type=date> value even if the sheet round-trip left them in DD-MM-YYYY.
 function _pjpISO(d){d=String(d||"").trim();if(/^\d{4}-\d{2}-\d{2}/.test(d))return d.slice(0,10);var m=d.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);if(m)return m[3]+"-"+("0"+m[1]).slice(-2)+"-"+("0"+m[2]).slice(-2);return d;}
 function pjpForDate(code,date){var dd=_pjpISO(date);var r=pjpRows(code).filter(function(p){return _pjpISO(p.date)===dd;});return r[0]||null;}
+// Always-visible "Today's PJP" card — shows the selected employee's plan for the picked date
+// straight from loadMaster().pjp (bypasses the Working-With / approval flow). Also self-diagnoses
+// (row count + which codes are loaded) so a blank plan tells us WHY.
+function renderTodayPjp(){
+  var box=document.getElementById("p_today_pjp_out");if(!box)return;
+  var code=elv("p_emp_code");var date=elv("p_date")||todayISO();
+  var m=loadMaster();var all=(m&&m.pjp)||[];
+  if(!code){box.innerHTML="Employee select karo…";return;}
+  var mine=all.filter(function(p){return String(p.code)===String(code);});
+  var row=mine.filter(function(p){return _pjpISO(p.date)===_pjpISO(date);})[0];
+  if(row){
+    box.innerHTML='<div style="font-size:15px;font-weight:800;color:#0f2e1d">📍 '+escapeHtml(row.town||"-")+' &nbsp;·&nbsp; '+escapeHtml(row.beat||"-")+'</div>'
+      +'<div class="hint" style="margin-top:4px">'+ddmmyy(_pjpISO(date))+(row.week?(" · "+escapeHtml(row.week)):"")+(row.focus?(' · 🎯 '+escapeHtml(row.focus)):"")+'</div>';
+    return;
+  }
+  var mo=_pjpISO(date).slice(0,7);
+  var month=mine.filter(function(p){return _pjpISO(p.date).slice(0,7)===mo;}).sort(function(a,b){return _pjpISO(a.date)<_pjpISO(b.date)?-1:1;});
+  if(month.length){
+    var trs=month.map(function(p){var t=_pjpISO(p.date)===_pjpISO(date);return '<tr style="'+(t?"background:#0f2e1d;color:#fff":"")+'"><td style="padding:2px 7px;white-space:nowrap">'+ddmmyy(_pjpISO(p.date))+'</td><td style="padding:2px 7px">'+escapeHtml(p.town||"-")+'</td><td style="padding:2px 7px">'+escapeHtml(p.beat||"-")+'</td></tr>';}).join("");
+    box.innerHTML='<div class="hint" style="margin:0 0 6px">Aaj ('+ddmmyy(_pjpISO(date))+') ka exact row nahi mila — is mahine ke <b>'+month.length+'</b> PJP din:</div>'
+      +'<div style="overflow-x:auto"><table style="font-size:11.5px;border-collapse:collapse;border:1px solid #e3ece5"><tr style="background:#eef5ef;font-weight:800"><td style="padding:3px 7px">Date</td><td style="padding:3px 7px">Town</td><td style="padding:3px 7px">Beat</td></tr>'+trs+'</table></div>';
+    return;
+  }
+  var codes=[];all.forEach(function(p){if(codes.indexOf(p.code)<0)codes.push(p.code);});
+  box.innerHTML='<div style="color:#b4432f;font-weight:700">⚠️ '+escapeHtml(code)+' ke liye koi PJP row load nahi hua.</div>'
+    +'<div class="hint" style="margin-top:5px">App me total PJP rows: <b>'+all.length+'</b>'+(codes.length?('<br>Loaded codes: '+escapeHtml(codes.slice(0,10).join(", "))+(codes.length>10?" …":"")):'')+'</div>'
+    +'<div class="hint" style="margin-top:5px">Fix: Admin → <b>Data</b> tab → July master (PJP sheet ke saath) upload karo; phir salesman device sync kare. Sheet me Date &amp; Code us employee ke hone chahiye.</div>';
+}
 function isOff(p){var t=((p.week||"")+" "+(p.town||"")+" "+(p.beat||"")).toUpperCase();return t.indexOf("OFF DAY")>=0||t.indexOf("SUNDAY")>=0||t.indexOf("LEAVE")>=0||t.indexOf("HOLIDAY")>=0||t.indexOf("WEEKLY OFF")>=0;}
 function offReason(p){var t=((p.week||"")+" "+(p.town||"")+" "+(p.beat||"")).toUpperCase();if(t.indexOf("LEAVE")>=0)return "Leave day";if(t.indexOf("HOLIDAY")>=0)return "Holiday";return "Off day (Sunday)";}
 function fillTowns(code,date){
