@@ -4539,8 +4539,29 @@ function buildPjpMsg(dr,emp,hod){var L=[];L.push("*Honasa Emerging Brand \u2014 
 function pjpAoa(list){var m=loadMaster();var head=["Code","Employee Name","Employee HQ","Zone","Date","Week Days","Working With","Town/City","Beat/Market","Focus Brand","Status"];var aoa=[head];list.forEach(function(dr){var e=empByAny(m,dr.code,"","","code")||{};pjpEntriesFor(dr).forEach(function(r){aoa.push([r.code,e.name||"",e.hq||"",r.zone,pjpDateDMY(r.date),r.week,r.ww||"",r.town,r.beat,r.focus,r.status||dr.status||""]);});});return aoa;}
 function pjpExcel(list){var wb=XLSX.utils.book_new();var ws=XLSX.utils.aoa_to_sheet(pjpAoa(list));ws["!cols"]=[{wch:12},{wch:20},{wch:14},{wch:8},{wch:13},{wch:11},{wch:18},{wch:18},{wch:22},{wch:20},{wch:12}];XLSX.utils.book_append_sheet(wb,ws,"PJP");return wb;}
 function pjpApplyUpload(key,aoa){var all=pjpLoad();var dr=all[key];if(!dr||!aoa||!aoa.length)return 0;var H=(aoa[0]||[]).map(function(z){return String(z==null?"":z).toLowerCase();});function col(nm){for(var i=0;i<H.length;i++){if(H[i].indexOf(nm)>=0)return i;}return -1;}var di=col("date"),wwi=col("working"),ti=col("town"),bi=col("beat"),ci=col("code");if(di<0||ti<0||bi<0)return 0;var days={};for(var r=1;r<aoa.length;r++){var row=aoa[r]||[];if(!row.length)continue;if(ci>=0&&String(row[ci]||"").trim()&&String(row[ci]).trim()!==dr.code)continue;var iso=pjpParseDMY(row[di]);if(!iso||iso.indexOf(dr.month)!==0)continue;if(new Date(iso+"T00:00:00").getDay()===0)continue;var ww=(wwi>=0?String(row[wwi]||"").trim():"")||"Self Working";days[iso]={ww:ww,city:String(row[ti]||"").trim(),beat:String(row[bi]||"").trim()};}dr.days=days;dr.offDays={};all[key]=dr;pjpSaveAll(all);return Object.keys(days).length;}
-function pjpWwForDate(code,date){var r=pjpForDate(code,date);if(!r)return "";if(r.ww)return r.ww;var cat=plannedCat(code,date);return (cat==="LEAVE")?"Leave":(cat==="HOLIDAY")?"HO Holiday":(cat==="SUNDAY")?"Weekly Off (Sunday)":(cat==="MEETING")?"Meeting / Activity":"Self Working";}
-function planSyncWwFromPjp(){var code=elv("p_emp_code"),date=elv("p_date");if(!code||!date)return;if(!planPjpOk())return;var ww=pjpWwForDate(code,date)||"Self Working";setv("p_ww",ww);document.querySelectorAll("#p_town_seg .seg-btn").forEach(function(b){b.classList.toggle("on",b.dataset.v==="yes");});}
+var P_WW_OPTS=["Self Working","ME Sales Team","BA Supervisor","Meeting / Activity","Weekly Off (Sunday)","Leave","Sick Leave","HO Holiday"];
+// Map any PJP "Ww" value (from the sheet, which may say "Distributor", "Self", "Market", …) to a
+// VALID Working-With dropdown option. Returning an unknown string set the <select> to blank →
+// isFieldWork failed → the whole PJP block hid and the HOD-Approval path showed instead.
+function pjpWwForDate(code,date){
+  var r=pjpForDate(code,date);if(!r)return "";
+  var raw=String(r.ww||"").trim();
+  if(raw){
+    var lk=raw.toLowerCase();
+    for(var i=0;i<P_WW_OPTS.length;i++){if(P_WW_OPTS[i].toLowerCase()===lk)return P_WW_OPTS[i];}
+    if(/sales\s*team|jsw|joint\s*work/.test(lk))return "ME Sales Team";
+    if(/\bba\b|supervisor|beautician/.test(lk))return "BA Supervisor";
+    if(/meeting|activity|exhibition|zero\s*day|knop/.test(lk))return "Meeting / Activity";
+    if(/sunday|weekly\s*off|off\s*day/.test(lk))return "Weekly Off (Sunday)";
+    if(/sick/.test(lk))return "Sick Leave";
+    if(/leave/.test(lk))return "Leave";
+    if(/holiday/.test(lk))return "HO Holiday";
+    return "Self Working"; // Distributor / Self / Market / anything field-ish → Self Working
+  }
+  var cat=plannedCat(code,date);
+  return (cat==="LEAVE")?"Leave":(cat==="HOLIDAY")?"HO Holiday":(cat==="SUNDAY")?"Weekly Off (Sunday)":(cat==="MEETING")?"Meeting / Activity":"Self Working";
+}
+function planSyncWwFromPjp(){var code=elv("p_emp_code"),date=elv("p_date");if(!code||!date)return;if(!planPjpOk())return;var ww=pjpWwForDate(code,date)||"Self Working";var sel=document.getElementById("p_ww");if(sel){sel.value=ww;if(sel.value!==ww)sel.value="Self Working";}document.querySelectorAll("#p_town_seg .seg-btn").forEach(function(b){b.classList.toggle("on",b.dataset.v==="yes");});}
 function wwNeedsApproval(){var ww=elv("p_ww");var code=elv("p_emp_code"),date=elv("p_date");if(!code||!date)return false;var pww=pjpWwForDate(code,date)||"Self Working";if(ww!==pww)return true;if(isFieldWork(ww)){var on=document.querySelector("#p_town_seg .seg-btn.on");if(on&&on.dataset.v==="no")return true;}return false;}
 /* ===== end PJP v5 ===== */
 
