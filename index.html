@@ -6406,39 +6406,82 @@ function eodTile(val,label,sub,color){
     +'<div style="font-size:11px;font-weight:700;color:#2c5f2d;margin-top:3px">'+label+'</div>'
     +(sub?('<div style="font-size:9.5px;color:#8a968f;margin-top:1px">'+sub+'</div>'):'')+'</div>';
 }
+// Map a product's brand (brandShort/brand) → one of the 5 brand tokens.
+function eodBrandToken(b){var lk=String(b||"").toLowerCase();
+  if(lk==="tdc"||lk.indexOf("derma")>=0)return "TDC";
+  if(lk==="bb"||lk.indexOf("bblunt")>=0)return "BB";
+  if(lk==="aq"||lk.indexOf("aqualog")>=0)return "AQ";
+  if(lk==="drs"||lk.indexOf("sheth")>=0)return "DRS";
+  if(lk==="cc"||lk.indexOf("color")>=0)return "CC";
+  return null;
+}
+// Bucket a TDC product into the daily-target sub-categories (by product category/sub-category).
+function eodTdcBucket(code){
+  var p=(typeof stProdByCode==="function"?stProdByCode(code):null)||{};
+  var s=String(p.subCategory||p.category||"").toLowerCase();
+  if(/face\s*wash|facewash|cleanser|\bwash\b/.test(s))return "FW";
+  if(/sunscreen|\bsun\b|spf/.test(s))return "Sunscreen";
+  if(/serum/.test(s))return "Serum";
+  if(/moistur|fmdc|cream|lotion|\bgel\b|toner/.test(s))return "FMDC/Moisturisers";
+  if(/combo|kit/.test(s))return "Combo";
+  return "Rest";
+}
 function eodSummaryInnerHtml(D,A){
   var plan=D.plan||{};var e=escapeHtml;
   var C=eodCalls(D,A);
-  // ── KPI chips (achieved · vs plan) — plan-card style ──
-  var nsoDone=(D.stores||[]).length,nsoTgt=num(plan.nsoPlan)||(plan.tgt&&num(plan.tgt.nso))||0;
-  var chip=function(v,sub,lbl,color){return '<div style="flex:1;background:#f0f6f1;border-radius:10px;padding:9px 4px;text-align:center"><div style="font-size:19px;font-weight:800;color:'+(color||"#0f2e1d")+'">'+v+'</div><div style="font-size:9px;color:#7a8b7e">'+sub+'</div><div style="font-size:10.5px;color:#5a6b5e;font-weight:700;margin-top:2px">'+lbl+'</div></div>';};
-  var chips='<div style="display:flex;gap:7px;margin:2px 0 12px">'
-    +chip(C.tc,"of "+C.sc+" plan","Calls")
-    +chip(A.placed.length+" / "+A.delivered.length,"placed / billed","Orders","#2f9e57")
-    +chip(nsoDone+(nsoTgt?(" / "+nsoTgt):""),"opened","New Stores")
+  var nsoDone=(D.stores||[]).length,nsoTgt=num(plan.nsoPlan)||(plan.tgt&&num(plan.tgt.nso))||15;
+  var dispTgt=num(plan.posmPlan)||(plan.tgt&&num(plan.tgt.display))||7;
+  var chip=function(v,sub,lbl,color){return '<div style="flex:1;background:#f0f6f1;border-radius:10px;padding:8px 4px;text-align:center"><div style="font-size:18px;font-weight:800;color:'+(color||"#0f2e1d")+'">'+v+'</div><div style="font-size:9px;color:#7a8b7e">'+sub+'</div><div style="font-size:10px;color:#5a6b5e;font-weight:700;margin-top:2px">'+lbl+'</div></div>';};
+  var chips='<div style="display:flex;gap:7px;margin:2px 0 11px">'
+    +chip(C.tc+" / "+C.sc,"visited / plan","SC Call")
+    +chip(nsoDone+" / "+nsoTgt,"opened / plan","NSO")
+    +chip((num(elv("e_posm"))||0)+" / "+dispTgt,"done / plan","Display MSL")
     +'</div>';
-  // ── Order Target vs Achievement (₹L) — the table the user asked for ──
-  var tgt=plan.tgt||null;
-  var TG={TDC:tgt?num(tgt.tdc):0.90,BB:tgt?num(tgt.BB):0.25,AQ:tgt?num(tgt.AQ):0.15,DRS:tgt?num(tgt.DRS):0.10,CC:tgt?num(tgt.CC):0.10};
-  var totTgt=tgt?num(tgt.totalDay):1.50;
-  var alias={TDC:["tdc","derma"],BB:["bb","bblunt"],AQ:["aq","aqualog"],DRS:["drs","sheth"],CC:["cc","color"]};
-  var ach={TDC:0,BB:0,AQ:0,DRS:0,CC:0};
-  Object.keys(A.brand).forEach(function(k){var lk=String(k).toLowerCase();["TDC","BB","AQ","DRS","CC"].some(function(t){if(lk===t.toLowerCase()||alias[t].some(function(a){return lk.indexOf(a)>=0;})){ach[t]+=A.brand[k].n;return true;}return false;});});
-  var totAch=ach.TDC+ach.BB+ach.AQ+ach.DRS+ach.CC;
-  var labels={TDC:"The Derma Co. (TDC)",BB:"BBlunt (BB)",AQ:"Aqualogica (AQ)",DRS:"Dr. Sheth's (DRS)",CC:"ME Color Care (CC)"};
-  var trow=function(lbl,tg,ac,bold){var pct=tg>0?Math.round(ac/tg*100):0;var col=pct>=100?"#1a7a3f":(pct>=60?"#b8860b":"#b4432f");
-    return '<tr'+(bold?' style="background:#0f2e1d;color:#fff"':'')+'>'
-      +'<td style="padding:6px 10px;border-bottom:1px solid #eef2ee'+(bold?';color:#fff;font-weight:800':'')+'">'+lbl+'</td>'
-      +'<td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eef2ee'+(bold?';color:#fff':'')+'">'+eodF(tg)+'</td>'
-      +'<td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eef2ee;font-weight:700'+(bold?';color:#fff':'')+'">'+eodF(ac)+'</td>'
-      +'<td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eef2ee;font-weight:800;color:'+(bold?'#fff':col)+'">'+pct+'%</td></tr>';};
-  var tbl='<div style="font-size:13px;font-weight:800;color:#0f2e1d;margin-bottom:5px">📊 Order Target vs Achievement <span style="font-size:11px;color:#7a8b7e;font-weight:600">(₹L)</span></div>'
-    +'<table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #e3ece5;border-radius:9px;overflow:hidden">'
-    +'<tr style="background:#eef5ef;font-size:11px;color:#44504a;font-weight:800"><td style="padding:6px 10px">Brand</td><td style="padding:6px 8px;text-align:right">Target</td><td style="padding:6px 8px;text-align:right">Achieved</td><td style="padding:6px 8px;text-align:right">%</td></tr>'
-    +["TDC","BB","AQ","DRS","CC"].map(function(t){return trow(labels[t],TG[t],ach[t],false);}).join("")
-    +trow("TOTAL / DAY",totTgt,totAch,true)
-    +'</table>';
-  // ── Order Status (live — updates as orders get billed / in-process, with delivery time) ──
+  // ── Achievement per brand token + TDC sub-bucket, from today's real orders ──
+  var A2={};
+  var addA=function(k,u,mrpL,nsvL){if(!A2[k])A2[k]={u:0,mrp:0,nsv:0};A2[k].u+=u;A2[k].mrp+=mrpL;A2[k].nsv+=nsvL;};
+  (D.orders||[]).forEach(function(o){
+    var isOrder=(o.status==="Order in Process"||o.status==="Billing Done")&&o.lines&&o.lines.length;if(!isOrder)return;
+    var lineSum=0;o.lines.forEach(function(l){lineSum+=(+l.value||0);});var onsv=(+o.totNsv||0);
+    o.lines.forEach(function(l){
+      var u=+l.units||0,val=+l.value||0;var nsv=lineSum>0?(onsv*val/lineSum):0;
+      var tok=eodBrandToken(eodBrandOf(l.code));if(!tok)return;
+      addA(tok,u,val/1e5,nsv);
+      if(tok==="TDC")addA("TDC_"+eodTdcBucket(l.code),u,val/1e5,nsv);
+    });
+  });
+  // ── Rows: exactly like the plan card (TDC sub-cats → TDC → BB/AQ/DRS/CC → TOTAL → MTD) ──
+  var ROWS=[
+    ["TDC_FW","TDC_FW",0.30,"sub"],["TDC_Sunscreen","TDC_SUNSCREEN",0.10,"sub"],["TDC_Serum","TDC_SERUM",0.15,"sub"],
+    ["TDC_FMDC/Moisturisers","TDC_FMDC/MOISTURISERS",0.15,"sub"],["TDC_Combo","TDC_COMBO",0.10,"sub"],["TDC_Rest","TDC_REST",0.10,"sub"],
+    ["TDC","TDC",0.90,"brand"],["BB","BB",0.25,"brand"],["AQ","AQ",0.15,"brand"],["DRS","DRS",0.10,"brand"],["CC","CC",0.10,"brand"]
+  ];
+  var cell=function(v,al,bold){return '<td style="padding:3px 6px;border-bottom:1px solid #eef2ee;white-space:nowrap;text-align:'+(al||"right")+(bold?';color:#fff':'')+'">'+v+'</td>';};
+  var rowHtml=function(label,tgt,a,kind){
+    var nsv=a?a.nsv:0,u=a?a.u:0,mrp=a?a.mrp:0;
+    var pct=tgt>0?Math.round(nsv/tgt*100):0;var btg=Math.max(tgt-nsv,0);
+    var msl=tgt*0.6,non=tgt*0.4;
+    var bold=(kind==="total"||kind==="mtd");
+    var trStyle=bold?"background:#0f2e1d;color:#fff;font-weight:800":(kind==="brand"?"font-weight:700":(kind==="sub"?"color:#5a6b5e":""));
+    var fs=(kind==="sub")?"9.5px":"10.5px";
+    return '<tr style="'+trStyle+';font-size:'+fs+'">'
+      +cell(e(label),"left",bold)+cell(eodF(tgt),"right",bold)+cell(u||0,"right",bold)+cell(eodF(mrp),"right",bold)
+      +cell(eodF(nsv),"right",bold)+cell(pct+"%","right",bold)+cell(eodF(btg),"right",bold)+cell(eodF(msl),"right",bold)+cell(eodF(non),"right",bold)+'</tr>';
+  };
+  var body=ROWS.map(function(r){return rowHtml(r[1],r[2],A2[r[0]],r[3]);}).join("");
+  // TOTAL / DAY
+  var totA={u:0,mrp:0,nsv:0};["TDC","BB","AQ","DRS","CC"].forEach(function(t){var a=A2[t];if(a){totA.u+=a.u;totA.mrp+=a.mrp;totA.nsv+=a.nsv;}});
+  body+=rowHtml("TOTAL ORDER TGT / DAY",1.50,totA,"total");
+  // MTD row — month-to-date NSV achieved vs 36 target
+  var mtdNsv=0;try{soLoad().forEach(function(o){if((o.emp===D.name||o.code===D.code)&&String(o.date||"").slice(0,7)===String(D.date||"").slice(0,7)&&(o.status==="Order in Process"||o.status==="Billing Done"))mtdNsv+=(+o.totNsv||0);});}catch(_e){}
+  body+=rowHtml("MTD @24 Days - Working",36.00,{u:0,mrp:0,nsv:mtdNsv},"mtd");
+  var head='<tr style="background:#eef5ef;font-size:9px;color:#44504a;font-weight:800">'
+    +'<td style="padding:4px 6px;text-align:left">Brand Name</td><td style="padding:4px 6px">Daily<br>Target</td><td style="padding:4px 6px">Order<br>Units</td><td style="padding:4px 6px">MRP<br>ACH</td><td style="padding:4px 6px">Order<br>NSV L</td><td style="padding:4px 6px">NSV<br>ACH%</td><td style="padding:4px 6px">NSV<br>BTG</td><td style="padding:4px 6px">NSV<br>MSL</td><td style="padding:4px 6px">NSV<br>NonMSL</td></tr>';
+  // overflow-x:auto wrapper → table scrolls WITHIN the card, page never overflows.
+  var tbl='<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e3ece5;border-radius:9px">'
+    +'<table style="min-width:560px;width:100%;border-collapse:collapse">'+head+body+'</table></div>'
+    +'<div style="font-size:9.5px;color:#8a968f;margin-top:4px">MSL/Non-MSL = target ka 60% / 40%. ← table ko side me scroll karo agar poora na dikhe.</div>';
+  // ── Order Status (live — updates as orders get billed, with delivery time) ──
   var sumVal=function(arr){var n=0;arr.forEach(function(o){(o.lines||[]).forEach(function(l){n+=(+l.value||0);});});return n/1e5;};
   var statusRow=function(lbl,arr,color){return '<div style="display:flex;justify-content:space-between;padding:5px 10px;border-bottom:1px solid #eef2ee;font-size:12px"><span style="color:'+color+';font-weight:700">'+lbl+'</span><span><b>'+arr.length+'</b> · ₹'+eodF(sumVal(arr))+'L</span></div>';};
   var stTbl='<div style="font-size:13px;font-weight:800;color:#0f2e1d;margin:14px 0 5px">🧾 Order Status</div>'
@@ -6529,9 +6572,10 @@ function eodRenderRecips(){
 
 /* ─── EOD share (bottom): full day summary + New-Outlet/Sec-Order Excel ─── */
 function eodExcelFilename(){return "EOD_"+String(elv("e_emp")||"Emp").replace(/[^\w]+/g,"_")+"_"+ddmmyy(elv("e_date")||todayISO())+".xlsx";}
-// Manager columns (from Employees master) appended to every EOD sheet — order ZM → RSM → ASM.
-var EOD_MGR_HEAD=["ZM Name","ZM Email","RSM Name","RSM Email","ASM Name","ASM Email"];
-function eodMgrCols(empName){var e=empObj(empName)||{};var g=function(m){m=m||{};return [m.name||"",m.email||""];};return g(e.zm).concat(g(e.rsm),g(e.asm));}
+// Manager columns (from Employees master) appended to every EOD sheet — ZM/RSM names only,
+// ASM name + email (ZM & RSM emails removed per requirement).
+var EOD_MGR_HEAD=["ZM Name","RSM Name","ASM Name","ASM Email"];
+function eodMgrCols(empName){var e=empObj(empName)||{};var z=e.zm||{},r=e.rsm||{},a=e.asm||{};return [z.name||"",r.name||"",a.name||"",a.email||""];}
 // Epoch (ms) parsed from a record id like "SO_1690000000000" — reliable chronological sort key.
 function eodEpoch(id){var m=String(id||"").match(/_(\d+)/);return m?parseInt(m[1],10):0;}
 function eodBuildDayWorkbook(){
@@ -6709,7 +6753,7 @@ function buildEodSummaryCardEl(){
   var m=loadMaster();var grp=(m&&m.config&&m.config.Group_Name)?m.config.Group_Name:"";
   var lg=document.querySelector(".hd-logo");var logoSrc=lg?lg.src:"";
   var d=document.createElement("div");
-  d.style.cssText="position:fixed;left:-9999px;top:0;width:520px;background:#fff;font-family:'Segoe UI',Roboto,Arial,sans-serif;color:#1a2b1e;box-sizing:border-box;border:1px solid #e3ece5;border-radius:14px;overflow:hidden";
+  d.style.cssText="position:fixed;left:-9999px;top:0;width:640px;background:#fff;font-family:'Segoe UI',Roboto,Arial,sans-serif;color:#1a2b1e;box-sizing:border-box;border:1px solid #e3ece5;border-radius:14px;overflow:hidden";
   // Green header bar — same design language as the Today Plan card.
   d.innerHTML='<div style="background:#0f2e1d;color:#fff;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px">'
       +'<div style="display:flex;align-items:center;gap:12px">'+(logoSrc?'<img src="'+logoSrc+'" style="height:38px;background:#fff;border-radius:8px;padding:3px 6px">':'')
