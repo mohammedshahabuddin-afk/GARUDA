@@ -2212,7 +2212,11 @@ var DEFAULT_MASTER={"config":{"SC_Call_Target":"7","NSO_Monthly_Target":"15","Cu
 var MKEY="me_em_master_v2";
 var basis="Phasing TGT";
 var HODstate={decision:"",sent:false};var hodTo="me";
-function loadMaster(){try{var m=JSON.parse(localStorage.getItem(MKEY));if(m&&m.employees&&m.employees.length){var hasBeat=m.stores&&m.stores.some&&m.stores.some(function(s){return (s.emAsm||"")!=="";});if(hasBeat)return m;}}catch(e){}return DEFAULT_MASTER;}
+// Use the synced/uploaded master whenever it has employees. (Previously also REQUIRED a store
+// with a non-empty EmAsm — but that discarded the WHOLE master, incl. PJP, when stores lacked
+// EM ASM, so uploaded PJP showed blank on every device. Beat/distributor features already fall
+// back to "show all" when there's no EmAsm, so the gate was unnecessary and is removed.)
+function loadMaster(){try{var m=JSON.parse(localStorage.getItem(MKEY));if(m&&m.employees&&m.employees.length)return m;}catch(e){}return DEFAULT_MASTER;}
 function saveMaster(m){localStorage.setItem(MKEY,JSON.stringify(m));}
 function Sv(v){return v===undefined||v===null?"":String(v).trim();}
 function uniq(a){var o=[],s={};a.forEach(function(x){if(x&&!s[x]){s[x]=1;o.push(x);}});return o;}
@@ -2335,16 +2339,21 @@ function empResolve(source){
     "<div style='margin-top:3px;color:#8a96a3'>\uD83D\uDCF1 "+(emp.mob||"-")+" \u00b7 \u2709\uFE0F "+(emp.email||"-")+"</div>";
   planRefresh();
 }
-function pjpRows(code){var m=loadMaster();return m.pjp.filter(function(p){return p.code===code;});}
-function pjpForDate(code,date){var r=pjpRows(code).filter(function(p){return p.date===date;});return r[0]||null;}
+function pjpRows(code){var m=loadMaster();return (m.pjp||[]).filter(function(p){return p.code===code;});}
+// Normalize any date to ISO YYYY-MM-DD (handles ISO already, or DD-MM-YYYY / DD/MM/YYYY) so PJP
+// rows match the <input type=date> value even if the sheet round-trip left them in DD-MM-YYYY.
+function _pjpISO(d){d=String(d||"").trim();if(/^\d{4}-\d{2}-\d{2}/.test(d))return d.slice(0,10);var m=d.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);if(m)return m[3]+"-"+("0"+m[1]).slice(-2)+"-"+("0"+m[2]).slice(-2);return d;}
+function pjpForDate(code,date){var dd=_pjpISO(date);var r=pjpRows(code).filter(function(p){return _pjpISO(p.date)===dd;});return r[0]||null;}
 function isOff(p){var t=((p.week||"")+" "+(p.town||"")+" "+(p.beat||"")).toUpperCase();return t.indexOf("OFF DAY")>=0||t.indexOf("SUNDAY")>=0||t.indexOf("LEAVE")>=0||t.indexOf("HOLIDAY")>=0||t.indexOf("WEEKLY OFF")>=0;}
 function offReason(p){var t=((p.week||"")+" "+(p.town||"")+" "+(p.beat||"")).toUpperCase();if(t.indexOf("LEAVE")>=0)return "Leave day";if(t.indexOf("HOLIDAY")>=0)return "Holiday";return "Off day (Sunday)";}
 function fillTowns(code,date){
-  var rows=pjpRows(code).filter(function(p){return ym(p.date)===ym(date)&&!isOff(p);});
+  var mm=_pjpISO(date).slice(0,7);
+  var rows=pjpRows(code).filter(function(p){return _pjpISO(p.date).slice(0,7)===mm&&!isOff(p);});
   fillSelect(document.getElementById("p_town_pjp"),uniq(rows.map(function(p){return p.town;})),"Town\u2026");
 }
 function fillBeats(code,date,town){
-  var rows=pjpRows(code).filter(function(p){return ym(p.date)===ym(date)&&p.town===town&&!isOff(p);});
+  var mm=_pjpISO(date).slice(0,7);
+  var rows=pjpRows(code).filter(function(p){return _pjpISO(p.date).slice(0,7)===mm&&p.town===town&&!isOff(p);});
   fillSelect(document.getElementById("p_beat_pjp"),uniq(rows.map(function(p){return p.beat;})),"Beat\u2026");
 }
 function focusFor(code,date,town,beat){
@@ -3701,7 +3710,7 @@ var TEST_ROUTE_TO_ADMIN=false;
 function pjpHodContact(){var m=loadMaster();if(TEST_ROUTE_TO_ADMIN)return {email:(m&&m.config.Admin_Email_ID)||"",wa:(m&&m.config.Admin_WhatsApp)||"",name:"Admin (Testing)"};return {email:(m&&m.config.HOD_Email_ID)||"",wa:(m&&m.config.HOD_WhatsApp)||"",name:(m&&m.config.HOD_Name)||"HOD"};}
 function emailPjpHodOne(key){var dr=pjpLoad()[key];if(!dr)return;var C=pjpHodContact();var mail=C.email;if(!mail){toast("Email id master me nahi hai");return;}var sub=encodeURIComponent("PJP Approval \u2014 "+pjpEmpName(dr.code)+" \u2014 "+monthName(dr.month));var body=encodeURIComponent(buildPjpMsg(dr,pjpEmpName(dr.code),C.name).replace(/\*/g,""));window.open("mailto:"+mail+"?subject="+sub+"&body="+body,"_blank");}
 function emailPjpHodCompiled(){var all=pjpLoad();var list=Object.keys(all).map(function(k){return all[k];}).filter(function(d){return d.beats&&d.beats.length&&d.status==="Accepted";});if(!list.length){toast("Koi Accepted PJP nahi \u2014 pehle Accept karein");return;}var m=loadMaster();var mail=pjpHodContact().email;var L=["Honasa Emerging Brand - Compiled PJP for approval",""];list.forEach(function(dr){L.push(pjpEmpName(dr.code)+" - "+monthName(dr.month)+" - "+dr.beats.length+" beats");});L.push("");L.push("(Detailed PJP Excel attach kiya gaya hai / Download Compiled se milega.)");if(typeof XLSX!=="undefined"){try{XLSX.writeFile(pjpExcel(list),"PJP_Compiled_"+todayISO()+".xlsx");}catch(e){}}var sub=encodeURIComponent("Compiled PJP Approval \u2014 "+todayISO());if(mail)window.open("mailto:"+mail+"?subject="+sub+"&body="+encodeURIComponent(L.join("\n")),"_blank");else toast("HOD email master me nahi hai");}
-function planPjpOk(){var code=elv("p_emp_code"),date=elv("p_date");if(!code||!date)return true;var mo=(date||"").slice(0,7);var m=loadMaster();return !!(m&&m.pjp&&m.pjp.some(function(r){return r.code===code&&(r.date||"").indexOf(mo)===0;}));}
+function planPjpOk(){var code=elv("p_emp_code"),date=elv("p_date");if(!code||!date)return true;var mo=_pjpISO(date).slice(0,7);var m=loadMaster();return !!(m&&m.pjp&&m.pjp.some(function(r){return r.code===code&&_pjpISO(r.date).indexOf(mo)===0;}));}
 function gotoPjpFromPlan(){var code=elv("p_emp_code");var dt=elv("p_date");if(dt)setv("pjp_month",dt.slice(0,7));if(code)setv("pjp_emp_code",code);var tab=document.querySelector('.nav button[data-v="pjp"]');if(tab)tab.click();if(code)pjpEmpResolve("code");else pjpRefresh();}
 function updatePlanPjpGate(){
   var el=document.getElementById("p_pjp_gate");if(!el)return;
