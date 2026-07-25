@@ -657,16 +657,10 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <div class="note" style="margin:0">⚠️ Master not loaded — open <b>Data → Upload Master Excel</b>.</div>
     </div>
 
-    <!-- Always-visible: today's PJP straight from the loaded master (independent of Working-With flow) -->
-    <div class="card" id="p_today_pjp_card" style="border-left:4px solid #0f2e1d;background:linear-gradient(90deg,#f0fdf4,#fff)">
-      <h2><span class="dot"></span>📅 Today's Beat Plan (PJP)</h2>
-      <div id="p_today_pjp_out" class="note" style="margin:0">Employee &amp; date select karo…</div>
-    </div>
-
     <div class="card">
       <h2><span class="dot"></span>Who &amp; Where</h2>
       <label>Date</label>
-      <input type="date" id="p_date" onchange="try{renderTodayPjp();}catch(e){}">
+      <input type="date" id="p_date">
 
       <label>Emerging Employee <span class="hint">(pick any one — others auto-fill)</span></label>
       <div class="row3">
