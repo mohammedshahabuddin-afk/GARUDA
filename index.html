@@ -11242,16 +11242,20 @@ function tadaFillClaimDesigDropdown(){
     try{localStorage.setItem(LOGIN_KEY,JSON.stringify(normalized));}catch(e){}
   }
   function pullDateToISO(v){
-    // Backend stores PJP dates as DD-MM-YYYY (see fmtDDMMYYYY on push). The app
-    // matches against <input type=date> values which are ISO YYYY-MM-DD, so convert
-    // back on pull — otherwise pjpForDate/fillTowns never match and city/beat stay blank.
+    // Convert any date the backend sends to ISO YYYY-MM-DD (the app matches <input type=date>).
+    // Cases: real Sheet date cells → Apps Script's readSheet_ toISOString() makes a UTC datetime
+    // ("2026-07-24T18:30:00Z" for IST midnight July 25) — we parse it and take the LOCAL date so it
+    // doesn't shift back a day. Also handles date-only ISO and DD-MM-YYYY (from the app's own push).
     if(v===""||v===null||v===undefined)return "";
-    if(v instanceof Date){return v.getFullYear()+"-"+String(v.getMonth()+1).padStart(2,"0")+"-"+String(v.getDate()).padStart(2,"0");}
+    var pad=function(n){return String(n).padStart(2,"0");};
+    var fmt=function(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());};
+    if(v instanceof Date){return fmt(v);}
     var s=String(v).trim();
-    var iso=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if(iso)return iso[1]+"-"+String(iso[2]).padStart(2,"0")+"-"+String(iso[3]).padStart(2,"0");
+    if(/\dT\d/.test(s)||/\d{1,2}:\d{2}/.test(s)){var d=new Date(s);if(!isNaN(d.getTime()))return fmt(d);}
+    var iso=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if(iso)return iso[1]+"-"+pad(iso[2])+"-"+pad(iso[3]);
     var dmy=s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-    if(dmy)return dmy[3]+"-"+String(dmy[2]).padStart(2,"0")+"-"+String(dmy[1]).padStart(2,"0");
+    if(dmy)return dmy[3]+"-"+pad(dmy[2])+"-"+pad(dmy[1]);
     return s;
   }
   function mergeMasterFromRemote(remote){
@@ -11423,6 +11427,9 @@ function tadaFillClaimDesigDropdown(){
       try{if(typeof updateApprBadge==="function")updateApprBadge();var aw=document.getElementById("sum_approvals_wrap");if(aw&&aw.style.display!=="none"&&typeof renderApprovals==="function")renderApprovals();}catch(e){}
       // If a plan-change approval came back (HOD approved/rejected), re-evaluate the Plan gate so it unlocks.
       try{var pv=document.getElementById("v-plan");if(pv&&pv.classList.contains("active")&&typeof planGate==="function")planGate();}catch(e){}
+      // PJP may have arrived only now (sync is ~2s after boot). If the Plan tab is open with an
+      // employee selected, re-run the resolve chain so today's Town/Beat/Focus fills from the PJP.
+      try{var pv2=document.getElementById("v-plan");if(pv2&&pv2.classList.contains("active")){var pc=(typeof elv==="function")?elv("p_emp_code"):"";if(pc&&typeof empResolve==="function")empResolve("code");}}catch(e){}
       // Dashboard was likely rendered empty on first load (before data arrived) → re-render now if it's showing.
       try{var smv=document.getElementById("v-sum");if(smv&&smv.classList.contains("active")&&typeof renderOverview==="function")renderOverview();}catch(e){}
       // Store role/code for filters
