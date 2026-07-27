@@ -826,6 +826,8 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
       <span id="pjp-month-lbl" class="note" style="margin:0"></span>
     </div>
     <div id="pjp_notif" style="display:none"></div>
+    <!-- autosave feedback: every day-cell edit is upserted into ONE PJP_Drafts row -->
+    <div id="pjp_autosave" class="hint" style="margin:0 0 8px;padding:5px 9px;background:#f1f5f9;border-left:3px solid #64748b;border-radius:6px">💾 Auto-save ON — har change turant sheet me save hota hai (same row overwrite, duplicate nahi)</div>
 
     <div class="card">
       <h2><span class="dot"></span>Who &amp; Month</h2>
@@ -2231,10 +2233,18 @@ document.addEventListener('DOMContentLoaded',function(){
     scroller.addEventListener('scroll',_navUpdateArrows,{passive:true});
     setTimeout(_navUpdateArrows,100);
   }
+  // Autosave: page-hide / reload / close flush + 60s heartbeat (see AUTOSAVE ENGINE)
+  try{if(typeof autoInstallTriggers==="function")autoInstallTriggers();}catch(e){}
 });
+// The app markup is injected by React, so DOMContentLoaded may already have fired.
+if(document.readyState!=="loading"){try{if(typeof autoInstallTriggers==="function")autoInstallTriggers();}catch(e){}}
 /* ═══════════════ end nav scroll ═══════════════ */
 
 function go(v,el){
+  // Leaving a task = flush it. This is the "page se page jaane par save ho jaye" guarantee;
+  // each task upserts its own single row, so switching tabs never duplicates anything.
+  try{if(typeof autoFlushAll==="function")autoFlushAll("nav");}catch(e){}
+  try{if(typeof autoFlushLocalDrafts==="function")autoFlushLocalDrafts();}catch(e){}
   if(typeof navAllowed==="function"&&!navAllowed(v)){
     var m=(typeof navLockMsg==="function")?navLockMsg(v):"🔒 Locked";
     if(typeof toast==="function")toast(m);
@@ -2774,7 +2784,7 @@ function rejectCity(i){var pend=pendCities();pend.splice(i,1);savePendCities(pen
 
 
 /* ---------------- SAVE PLAN ---------------- */
-function savePlan(){var m=loadMaster();var name=elv("p_emp_name"),code=elv("p_emp_code"),date=elv("p_date");if(!name){toast("Select an employee");return;}if(!date){toast("Pick a date");return;}if(!fullAccess()&&!planPjpOk()){toast("Pehle is month ka PJP approve karwao - PJP tab");gotoPjpFromPlan();return;}var emp=m?m.employees.filter(function(e){return e.code===code||e.name===name;})[0]:null;var ww=elv("p_ww");var field=isFieldWork(ww);var town="",beat="",focus="",week="",offpjp=false,approval="";if(field){var yes=document.querySelector("#p_town_seg .seg-btn.on").dataset.v==="yes";if(yes){town=elv("p_town_pjp");beat=elv("p_beat_pjp");var pr=pjpForDate(code,date);week=pr?pr.week:"";focus=document.getElementById("p_focus_box").dataset.focus||"";}else{town=elv("p_town_other_sel").trim();if(town==="__add__"){toast("Add & submit the new city first");return;}beat=elv("p_beat_other").trim();focus=elv("p_focus_other").trim();offpjp=true;}if(!town){toast("Select / enter town");return;}}else{if(ww==="Meeting / Activity"){if(!elv("p_ww_remark").trim()){toast("Please enter remarks");return;}}if((ww==="Leave"||ww==="Sick Leave")&&wwNeedsApproval()){if(!elv("p_ww_leave_reason").trim()){toast("Please enter the reason");return;}if(!elv("p_ww_leave_remark").trim()){toast("Please enter remarks");return;}}}if((typeof sessionIsAdminHod!=="function"||!sessionIsAdminHod())&&wwNeedsApproval()){if(!planDevApproved(code,date)){var _ds=planDevStatus(code,date);toast(/pending/i.test(_ds)?"⏳ HOD approval pending — approve hone ke baad hi save hoga":(/rejected/i.test(_ds)?"✖ HOD ne reject kiya — plan revise karke dobara bhejo":"Pehle 'Send for Approval' dabao — HOD approve karega tab plan save hoga"));return;}approval="Approved";}var wwFull=ww;if(ww==="ME Sales Team"||ww==="BA Supervisor"){var wwName=elv("p_ww_name").trim();wwFull=ww+(wwName?(" — "+wwName):"");}else if(ww==="Meeting / Activity"){var at=elv("p_ww_acttype"),dur=elv("p_ww_dur"),rmk=elv("p_ww_remark").trim();wwFull="Meeting/Activity"+(at?(" — "+at):"")+(dur?(" ("+dur+")"):"")+(rmk?(" · "+rmk):"");}else if(ww==="Leave"||ww==="Sick Leave"){var rs=elv("p_ww_leave_reason").trim(),rm=elv("p_ww_leave_remark").trim();wwFull=ww+(rs?(" — "+rs):"")+(rm?(" · "+rm):"");}var tgt=null;if(field){var T=DAILY_ORDER_TGT;tgt={fixed:true,totalDay:T.totalDay,mtd:T.mtd,mtdDays:T.mtdDays,tdc:T.tdcSub,BB:0.25,AQ:0.15,DRS:0.10,CC:0.10};}var db=load();var id=recId(name,date);var r=db[id]||{};r.date=date;r.employee=name;r.code=code;r.zone=emp?emp.zone:"";r.hq=emp?emp.hq:"";r.desig=emp?emp.desig:"";r.town=town;r.beat=beat;r.focus=focus;r.week=week;r.offpjp=offpjp;r.approval=approval;r.workingWith=wwFull;r.sc=field?num(elv("p_sc")):0;r.nsoPlan=field?num(elv("p_nso")):0;r.posmPlan=field?num(elv("p_posm")):0;r.tgt=tgt;r.planTime=nowTime();r.planDone=true;db[id]=r;save(db);try{recordPlanDeviation(r);}catch(e){}toast("Plan saved ✓");document.getElementById("plan-out").innerHTML=planMsgHtml(r);updatePlanStatus();}
+function savePlan(){var m=loadMaster();var name=elv("p_emp_name"),code=elv("p_emp_code"),date=elv("p_date");if(!name){toast("Select an employee");return;}if(!date){toast("Pick a date");return;}if(!fullAccess()&&!planPjpOk()){toast("Pehle is month ka PJP approve karwao - PJP tab");gotoPjpFromPlan();return;}var emp=m?m.employees.filter(function(e){return e.code===code||e.name===name;})[0]:null;var ww=elv("p_ww");var field=isFieldWork(ww);var town="",beat="",focus="",week="",offpjp=false,approval="";if(field){var yes=document.querySelector("#p_town_seg .seg-btn.on").dataset.v==="yes";if(yes){town=elv("p_town_pjp");beat=elv("p_beat_pjp");var pr=pjpForDate(code,date);week=pr?pr.week:"";focus=document.getElementById("p_focus_box").dataset.focus||"";}else{town=elv("p_town_other_sel").trim();if(town==="__add__"){toast("Add & submit the new city first");return;}beat=elv("p_beat_other").trim();focus=elv("p_focus_other").trim();offpjp=true;}if(!town){toast("Select / enter town");return;}}else{if(ww==="Meeting / Activity"){if(!elv("p_ww_remark").trim()){toast("Please enter remarks");return;}}if((ww==="Leave"||ww==="Sick Leave")&&wwNeedsApproval()){if(!elv("p_ww_leave_reason").trim()){toast("Please enter the reason");return;}if(!elv("p_ww_leave_remark").trim()){toast("Please enter remarks");return;}}}if((typeof sessionIsAdminHod!=="function"||!sessionIsAdminHod())&&wwNeedsApproval()){if(!planDevApproved(code,date)){var _ds=planDevStatus(code,date);toast(/pending/i.test(_ds)?"⏳ HOD approval pending — approve hone ke baad hi save hoga":(/rejected/i.test(_ds)?"✖ HOD ne reject kiya — plan revise karke dobara bhejo":"Pehle 'Send for Approval' dabao — HOD approve karega tab plan save hoga"));return;}approval="Approved";}var wwFull=ww;if(ww==="ME Sales Team"||ww==="BA Supervisor"){var wwName=elv("p_ww_name").trim();wwFull=ww+(wwName?(" — "+wwName):"");}else if(ww==="Meeting / Activity"){var at=elv("p_ww_acttype"),dur=elv("p_ww_dur"),rmk=elv("p_ww_remark").trim();wwFull="Meeting/Activity"+(at?(" — "+at):"")+(dur?(" ("+dur+")"):"")+(rmk?(" · "+rmk):"");}else if(ww==="Leave"||ww==="Sick Leave"){var rs=elv("p_ww_leave_reason").trim(),rm=elv("p_ww_leave_remark").trim();wwFull=ww+(rs?(" — "+rs):"")+(rm?(" · "+rm):"");}var tgt=null;if(field){var T=DAILY_ORDER_TGT;tgt={fixed:true,totalDay:T.totalDay,mtd:T.mtd,mtdDays:T.mtdDays,tdc:T.tdcSub,BB:0.25,AQ:0.15,DRS:0.10,CC:0.10};}var db=load();var id=recId(name,date);var r=db[id]||{};r.date=date;r.employee=name;r.code=code;r.zone=emp?emp.zone:"";r.hq=emp?emp.hq:"";r.desig=emp?emp.desig:"";r.town=town;r.beat=beat;r.focus=focus;r.week=week;r.offpjp=offpjp;r.approval=approval;r.workingWith=wwFull;r.sc=field?num(elv("p_sc")):0;r.nsoPlan=field?num(elv("p_nso")):0;r.posmPlan=field?num(elv("p_posm")):0;r.tgt=tgt;r.planTime=nowTime();r.planDone=true;db[id]=r;save(db);try{recordPlanDeviation(r);}catch(e){}try{autoTouchDay(r.code,r.date);}catch(e){}toast("Plan saved ✓");document.getElementById("plan-out").innerHTML=planMsgHtml(r);updatePlanStatus();}
 function planMsgHtml(r){window._lastPlanRec=r;return msgActions(buildPlanMsg(r),"Plan ready \u2014 send to HOD / ZM / RSM / ASM",true);}
 function buildPlanMsg(r){
   var m=loadMaster();var grp=(m&&m.config.Group_Name)?m.config.Group_Name:"";
@@ -3132,6 +3142,9 @@ var camStream=null,camTarget=null,nsPhotos={front:"",inside:""};
 function fieldRefresh(){
   var el=document.getElementById("field-date-lbl");var date=elv("f_date");
   if(el)el.textContent=date?ddmmyy(date):"";
+  // Recover a punch that was interrupted (tab switch / refresh / disconnect). Only fires when
+  // the form is empty, so it can never overwrite what the rep is typing right now.
+  try{ffPunchRestoreDraft();}catch(e){}
   showMeta("f_emp","f_meta");fillDistDatalists();
   var name=elv("f_emp");var code=name?empCodeOf(name):"";
   var sdl=document.getElementById("dl_ns_state");
@@ -3566,6 +3579,7 @@ function osStatusChange(){
 }
 function osResetOrder(){
   osOrder=[];osStore=null;
+  try{ffPunchClearDraft();}catch(e){}   // the punch is done/abandoned — drop its recovery draft
   ["os_search","os_f_tbrand","os_f_brand","os_f_cat","os_f_subcat","os_f_range","os_f_uom","os_f_prod","os_remarks","os_no_remarks","os_d_client","os_d_code","os_d_name","os_d_city","os_d_state","os_d_status","os_d_dbcode","os_d_dbname"].forEach(function(id){var el=document.getElementById(id);if(el)el.value="";});
   var nr=document.getElementById("os_no_reason");if(nr)nr.selectedIndex=0;
   var st=document.getElementById("os_status");if(st)st.selectedIndex=0;
@@ -3687,7 +3701,16 @@ function pad2(n){return (n<10?"0":"")+n;}
 function pjpEmpCode(){var c=elv("pjp_emp_code");if(c)return c;var n=elv("pjp_emp_name");return n?empCodeOf(n):"";}
 function pjpDraftKey(code,month){return code+"__"+month;}
 function getPjpDraft(){var code=pjpEmpCode(),month=elv("pjp_month");if(!code||!month)return null;var all=pjpLoad();var k=pjpDraftKey(code,month);if(!all[k])all[k]={code:code,month:month,beats:[],status:"Draft"};return all[k];}
-function savePjpDraft(dr){var all=pjpLoad();all[pjpDraftKey(dr.code,dr.month)]=dr;pjpSaveAll(all);}
+/* EVERY PJP edit funnels through here (day cells, Working-With, station, city/beat, off days),
+   so this is the one place autosave needs to hook. updatedAt drives the newest-wins merge that
+   brings the draft back on another device. */
+function savePjpDraft(dr){
+  var all=pjpLoad();
+  dr.updatedAt=Date.now();
+  all[pjpDraftKey(dr.code,dr.month)]=dr;
+  pjpSaveAll(all);
+  try{autoTouchPjp(dr);}catch(e){}
+}
 function nextMonthStr(){var d=new Date();d.setDate(1);d.setMonth(d.getMonth()+1);return d.getFullYear()+"-"+pad2(d.getMonth()+1);}
 function monthName(mm){if(!mm)return "";var q=mm.split("-");var nm=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return (nm[(+q[1])-1]||"")+" "+q[0];}
 function pjpEmpResolve(source){
@@ -4812,6 +4835,9 @@ function osAddByProd(){
 
 /* ===== Secondary Order line calc (v2): Value=Units*MRP, NSV=Value/100000 ===== */
 function renderOsLines(){
+  // Every add / units / value / remove change repaints through here → persist the punch draft
+  // locally so an interrupted order survives (kept OUT of the sheet until it is submitted).
+  try{ffPunchSaveDraft();}catch(e){}
   var box=document.getElementById("os_lines");if(!box)return;
   if(!osOrder.length){box.innerHTML='<div class="note" style="margin:0">Product search karke add karein.</div>';var t0=document.getElementById("os_totals");if(t0)t0.innerHTML="";return;}
   var h="",tu=0,tv=0,tn=0;
@@ -4834,6 +4860,9 @@ function osLineVal(i,v){osOrder[i].value=num(v);renderOsLines();}
 
 /* ===== Secondary Order lines (v3): MRP column + NSV = Value*60%/100000 ===== */
 function renderOsLines(){
+  // Every add / units / value / remove change repaints through here → persist the punch draft
+  // locally so an interrupted order survives (kept OUT of the sheet until it is submitted).
+  try{ffPunchSaveDraft();}catch(e){}
   var box=document.getElementById("os_lines");if(!box)return;
   if(!osOrder.length){box.innerHTML='<div class="note" style="margin:0">Product search karke add karein.</div>';var t0=document.getElementById("os_totals");if(t0)t0.innerHTML="";return;}
   var h="",tu=0,tv=0,tn=0;
@@ -9044,6 +9073,165 @@ function downloadMyDataExcel(){
 }
 /* ═══════════════ end DOWNLOAD MY DATA MODULE ═══════════════ */
 
+/* ═══════════════════════ AUTOSAVE ENGINE ═══════════════════════════════════
+   Nothing a rep types should be lost, and re-saving the same task must NEVER create a second
+   row. Two rules make that true:
+     1. every task flushes to ONE deterministic row key (PJP → Key "code__month",
+        day record → Id "code_date"), and the backend upserts on that key, so the 20th edit
+        overwrites the 1st instead of appending.
+     2. a flush is triggered by leaving the task, not only by pressing Save:
+        tab switch (go), 2s after the last keystroke, page hide / reload / close, and a 60s
+        heartbeat. Offline flushes go through the normal push queue and drain on next sync.
+   Register a task with autoRegister(name, flushFn); mark it dirty with autoTouch(name).
+   ═══════════════════════════════════════════════════════════════════════════ */
+var AUTO_TASKS={},_autoTimer=null,_autoLast="";
+function autoRegister(name,fn){AUTO_TASKS[name]={fn:fn,dirty:false};}
+function autoTouch(name){
+  var t=AUTO_TASKS[name];if(!t)return;
+  t.dirty=true;autoStatus("⏳ Saving…","wait");
+  clearTimeout(_autoTimer);_autoTimer=setTimeout(function(){autoFlushAll("idle");},2000);
+}
+function autoDirty(){return Object.keys(AUTO_TASKS).some(function(n){return AUTO_TASKS[n].dirty;});}
+function autoFlushAll(reason){
+  clearTimeout(_autoTimer);
+  var names=Object.keys(AUTO_TASKS).filter(function(n){return AUTO_TASKS[n].dirty;});
+  if(!names.length)return Promise.resolve(0);
+  var jobs=[];
+  names.forEach(function(n){
+    AUTO_TASKS[n].dirty=false;                       // clear first: a fresh edit re-dirties it
+    try{var p=AUTO_TASKS[n].fn();if(p&&p.then)jobs.push(p);}catch(e){}
+  });
+  if(!jobs.length){autoStatus("💾 Saved locally","ok");return Promise.resolve(names.length);}
+  return Promise.all(jobs).then(function(res){
+    var ok=res.every(function(r){return !r||r.ok!==false;});
+    autoStatus(ok?("✅ Saved to sheet · "+_autoTime()):"📥 Saved locally — sheet pe queue me hai",ok?"ok":"queue");
+    return names.length;
+  }).catch(function(){autoStatus("📥 Saved locally — sync ka wait","queue");return names.length;});
+}
+function _autoTime(){try{return new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});}catch(e){return "";}}
+/* Small, non-blocking indicator (never a toast — autosave must not nag). */
+function autoStatus(txt,kind){
+  _autoLast=txt;
+  var el=document.getElementById("auto_save_chip");
+  if(!el){
+    el=document.createElement("div");el.id="auto_save_chip";
+    el.style.cssText="position:fixed;left:10px;bottom:64px;z-index:70;font-size:10.5px;font-weight:700;"
+      +"padding:4px 10px;border-radius:20px;box-shadow:var(--shadow);opacity:0;transition:opacity .25s;pointer-events:none";
+    document.body.appendChild(el);
+  }
+  var col=kind==="ok"?"#eafbf0;color:#0f6e37;border:1px solid #bfe3c6"
+        :(kind==="queue"?"#fff8e6;color:#7a5a00;border:1px solid #f0d98a"
+        :"#eef2ff;color:#3730a3;border:1px solid #c7d2fe");
+  el.style.cssText=el.style.cssText.replace(/background:[^;]*;?/,"")+";background:"+col;
+  el.textContent=txt;el.style.opacity="1";
+  clearTimeout(el._t);el._t=setTimeout(function(){el.style.opacity="0";},kind==="wait"?4000:2600);
+  // Mirror into the PJP tab so a rep building a month plan can see it inline.
+  var ps=document.getElementById("pjp_autosave");if(ps)ps.textContent=txt;
+}
+/* ---- Task 1: PJP month draft → PJP_Drafts, one row per employee+month ---- */
+var _autoPjpKeys={};
+function autoTouchPjp(dr){
+  if(!dr||!dr.code||!dr.month)return;
+  _autoPjpKeys[dr.code+"__"+dr.month]=1;
+  autoTouch("pjp");
+}
+autoRegister("pjp",function(){
+  var keys=Object.keys(_autoPjpKeys);_autoPjpKeys={};
+  if(!keys.length)return null;
+  var all=(typeof pjpLoad==="function")?pjpLoad():{};
+  var jobs=[];
+  keys.forEach(function(k){
+    var dr=all[k];if(!dr||!dr.code||!dr.month)return;
+    // Status is NOT touched — an autosave is not a submission. It stays Draft until pjpSubmit.
+    if(window.__sync&&window.__sync.pushPjpDraft)jobs.push(window.__sync.pushPjpDraft(dr));
+  });
+  if(!jobs.length)return null;
+  return Promise.all(jobs).then(function(r){return {ok:r.every(function(x){return !x||x.ok!==false;})};});
+});
+/* ---- Task 2: the day record (plan → EOD) → EOD sheet, one row per employee+date ----
+   A plan used to reach the sheet only when EOD was saved hours later, so a disconnect in
+   between lost the whole day's plan. Now it upserts on Id "code_date" the moment it is saved. */
+var _autoDayKeys={};
+function autoTouchDay(code,date){
+  if(!code||!date)return;
+  _autoDayKeys[code+"|"+date]=1;
+  autoTouch("day");
+}
+autoRegister("day",function(){
+  var keys=Object.keys(_autoDayKeys);_autoDayKeys={};
+  if(!keys.length||!(window.__sync&&window.__sync.push))return null;
+  var db=(typeof load==="function")?load():{};
+  var rows=[];
+  keys.forEach(function(k){
+    var parts=k.split("|"),code=parts[0],date=parts[1];
+    var rec=null;
+    Object.keys(db).forEach(function(id){
+      var r=db[id];
+      if(r&&r.date===date&&(String(r.code||"")===code||String(r.employee||"")===code))rec=r;
+    });
+    if(!rec)return;
+    rows.push({Id:code+"_"+date,Date:ddmmyy(date),EmpCode:rec.code||code,EmpName:rec.employee||"",
+               EodJson:JSON.stringify(rec),Ts:rec.eodTime||rec.planTime||nowTime()});
+  });
+  if(!rows.length)return null;
+  return window.__sync.push("EOD",rows,"Id");
+});
+/* ---- Task 3: half-finished FORMS → local drafts only ----
+   These are deliberately NOT pushed to the sheet: an unsubmitted order/store would land as a
+   junk row with no status. They are written to localStorage instead, so a disconnect, refresh
+   or accidental tab switch cannot lose the typing; the sheet still only ever sees real records. */
+var PUNCH_DRAFT_KEY="me_em_punch_draft_v1";
+function ffPunchSaveDraft(){
+  try{
+    if(typeof osOrder==="undefined")return;
+    var lines=(osOrder||[]).slice();
+    var hasStore=(typeof osStore!=="undefined"&&osStore);
+    if(!lines.length&&!hasStore){localStorage.removeItem(PUNCH_DRAFT_KEY);return;}
+    localStorage.setItem(PUNCH_DRAFT_KEY,JSON.stringify({
+      emp:elv("f_emp"),date:elv("f_date"),store:hasStore?osStore:null,lines:lines,ts:Date.now()
+    }));
+  }catch(e){}
+}
+function ffPunchRestoreDraft(){
+  try{
+    var d=JSON.parse(localStorage.getItem(PUNCH_DRAFT_KEY)||"null");
+    if(!d||!d.lines||!d.lines.length)return false;
+    if(d.emp&&elv("f_emp")&&d.emp!==elv("f_emp"))return false;      // another rep's draft
+    if(typeof osOrder!=="undefined"&&osOrder&&osOrder.length)return false; // don't clobber live edits
+    osOrder=d.lines.slice();
+    if(d.store&&typeof osStore!=="undefined"&&!osStore)osStore=d.store;
+    try{if(typeof renderOsLines==="function")renderOsLines();}catch(e){}
+    toast("↩️ Pichla adhoora order wapas load ho gaya ("+osOrder.length+" SKU)");
+    return true;
+  }catch(e){return false;}
+}
+function ffPunchClearDraft(){try{localStorage.removeItem(PUNCH_DRAFT_KEY);}catch(e){}}
+/* Called on every navigation — quiet, no toasts. */
+function autoFlushLocalDrafts(){
+  try{ffPunchSaveDraft();}catch(e){}
+  // New Store: reuse the existing draft writer but without its toast
+  try{
+    if(typeof nsDraftFields==="function"&&document.getElementById("ns_name")){
+      var d={_emp:elv("f_emp"),_ts:Date.now()},any=false;
+      nsDraftFields().forEach(function(id){var el=document.getElementById(id);if(el){d[id]=el.value;if(String(el.value||"").trim())any=true;}});
+      if(any)localStorage.setItem(NS_DRAFT_KEY,JSON.stringify(d));
+    }
+  }catch(e){}
+}
+/* ---- Flush triggers ---- */
+function autoInstallTriggers(){
+  if(window._autoWired)return;window._autoWired=true;
+  // leaving the page / switching apps / reload / close
+  try{
+    window.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")autoFlushAll("hide");});
+    window.addEventListener("pagehide",function(){autoFlushAll("pagehide");});
+    window.addEventListener("beforeunload",function(){autoFlushAll("unload");});
+  }catch(e){}
+  // heartbeat, so a rep who leaves the tab open still gets their work stored
+  setInterval(function(){if(autoDirty())autoFlushAll("heartbeat");},60000);
+}
+/* ═══════════════════════ end AUTOSAVE ENGINE ═══════════════════════════════ */
+
 /* ═══════════════ MASTER SOURCE + DATA AUDIT & REPAIR MODULE ═══════════════
    Three operational needs this covers:
    1. PROVE the app runs on GARUDA-sheet masters (Stores / Distributors / Products / PJP)
@@ -12146,6 +12334,26 @@ function tadaFillClaimDesigDropdown(){
   function _mrIsDbCode(v){return /^\d{6,9}$/.test(_mrTxt(v));}
   function _mrIsDate(v){return /^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}/.test(_mrTxt(v))||/^\d{4}-\d{2}-\d{2}/.test(_mrTxt(v));}
   function _mrPlaceholder(v){return /^(VACANT|TBA)([_\-\s]|$)/i.test(_mrTxt(v));}
+  function _mrIsStoreCode(v){return /^HCL\d/i.test(_mrTxt(v));}
+  function _mrHasAlpha(v){return /[A-Za-z]/.test(_mrTxt(v));}
+  /* Pick the distributor code+name pair out of a row whose columns are shifted.
+     A code alone is not enough evidence: plenty of stores have an all-digit ClientId (e.g.
+     29760067), and taking the first 6-9 digit value grabbed THAT, pairing it with the adjacent
+     CompanyCode -> the picker filled up with "HCL045267" junk. So a pair is only accepted when
+     the code is not one of the store's own identifiers AND the value after it reads like a
+     name (has letters, is not a date/code/store-code). Verified on all 810 live rows. */
+  function _mrFindDbPair(vals,identSet){
+    for(var k=0;k<vals.length;k++){
+      var cv=_mrTxt(vals[k]);
+      if(!_mrIsDbCode(cv))continue;
+      if(identSet[cv.toUpperCase()])continue;
+      var nx=(k+1<vals.length)?_mrTxt(vals[k+1]):"";
+      if(!nx||_mrIsDbCode(nx)||_mrIsDate(nx)||_mrIsStoreCode(nx)||!_mrHasAlpha(nx))continue;
+      if(identSet[nx.toUpperCase()])continue;
+      return {code:cv,name:nx};
+    }
+    return null;
+  }
   function _mrRepairStores(rawRows,mapped,employees){
     var st={emAsm:0,db:0,mapped:0};
     if(!rawRows||!rawRows.length||!mapped||!mapped.length)return st;
@@ -12159,15 +12367,11 @@ function tadaFillClaimDesigDropdown(){
         if(!found)for(j=0;j<vals.length;j++){var v2=_mrTxt(vals[j]);if(_mrPlaceholder(v2)){found=v2;break;}}
         if(found){s.emAsm=found;st.emAsm++;}
       }
-      if(!_mrIsDbCode(s.dbCode)){
-        for(var k=0;k<vals.length;k++){
-          if(_mrIsDbCode(vals[k])){
-            s.dbCode=_mrTxt(vals[k]);
-            var nx=(k+1<vals.length)?_mrTxt(vals[k+1]):"";
-            if(nx&&!_mrIsDbCode(nx)&&!_mrIsDate(nx))s.dbName=nx;
-            st.db++;break;
-          }
-        }
+      if(!_mrIsDbCode(s.dbCode)||!_mrHasAlpha(s.dbName)){
+        var ident={};
+        [s.clientId,s.companyCode].forEach(function(x){var v=_mrTxt(x);if(v)ident[v.toUpperCase()]=1;});
+        var pair=_mrFindDbPair(vals,ident);
+        if(pair){s.dbCode=pair.code;s.dbName=pair.name;st.db++;}
       }
       if(names[_mrTxt(s.emAsm).toUpperCase()])st.mapped++;
     }
@@ -12176,16 +12380,9 @@ function tadaFillClaimDesigDropdown(){
   function _mrRepairDistributors(rawRows,mapped,stores){
     var res={fixed:0,rebuilt:false,list:mapped||[]};
     (rawRows||[]).forEach(function(raw,i){
-      var d=res.list[i];if(!d||_mrIsDbCode(d.code))return;
-      var vals=_mrVals(raw);
-      for(var k=0;k<vals.length;k++){
-        if(_mrIsDbCode(vals[k])){
-          d.code=_mrTxt(vals[k]);
-          var nx=(k+1<vals.length)?_mrTxt(vals[k+1]):"";
-          if(nx&&!_mrIsDbCode(nx)&&!_mrIsDate(nx))d.name=nx;
-          res.fixed++;break;
-        }
-      }
+      var d=res.list[i];if(!d||(_mrIsDbCode(d.code)&&_mrHasAlpha(d.name)))return;
+      var pair=_mrFindDbPair(_mrVals(raw),{});
+      if(pair){d.code=pair.code;d.name=pair.name;res.fixed++;}
     });
     var good=res.list.filter(function(d){return _mrIsDbCode(d.code)&&_mrTxt(d.name);}).length;
     if(good<Math.max(3,Math.round(res.list.length*0.3))){
@@ -12451,6 +12648,55 @@ function tadaFillClaimDesigDropdown(){
     mergeKey("me_em_newstores_v1",remote.NewStores,"StoreId",function(r){return r.storeId||r.id;},function(r){return {id:r.StoreId,storeId:r.StoreId,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),dbCode:r.DbCode,dbName:r.DbName,type:r.StoreType,storeName:r.StoreName,state:r.State,town:r.Town,address:r.Address,pincode:r.Pincode,beat:r.Beat,category:r.Category,daySales:r.DaySales,monthlyTurnover:r.MonthlyTurnover,owner:r.OwnerName,ownerMob:r.OwnerMobile,reason:r.Reason,status:r.Status||"In-Process",statusReason:r.StatusReason||"",ts:r.Ts};});
   }
 
+  /* ─── AUTOSAVE CATCH-UP (local → sheet) ─────────────────────────────────────
+     A flush can still be lost: the browser is closed a second after an edit, or the device is
+     offline when the tab is closed (the in-flight fetch dies with the page). The local copy
+     always survives, so on every pull we compare each local PJP draft's updatedAt with the
+     row the sheet returned and re-push anything the sheet is missing or behind on. Same Key,
+     so it overwrites — this can never create a duplicate. */
+  function syncPjpDraftsUp(remote){
+    var local={};
+    try{local=JSON.parse(localStorage.getItem("me_em_pjp_draft_v1")||"{}")||{};}catch(e){return 0;}
+    var keys=Object.keys(local);if(!keys.length)return 0;
+    var rmap={};
+    ((remote&&remote.PJP_Drafts)||[]).forEach(function(r){if(r&&r.Key)rmap[String(r.Key)]=r;});
+    var sent=0;
+    keys.forEach(function(k){
+      var dr=local[k];if(!dr||!dr.code||!dr.month)return;
+      var rr=rmap[k];
+      var lu=+dr.updatedAt||0,ru=rr?(+rr.UpdatedAt||0):-1;
+      if(rr&&ru>=lu)return;                      // sheet already has this edit (or a newer one)
+      pushPjpDraftRow(dr);sent++;
+    });
+    return sent;
+  }
+
+  /* ─── DAY RECORDS (plan + EOD) MERGE-DOWN ───────────────────────────────────
+     The EOD sheet is the only place a day record (plan targets, town/beat, calls, EOD figures)
+     lives outside the device. Nothing ever read it back, so a rep on a new phone / cleared
+     browser saw an empty Plan tab even though the sheet had their day. Now pulled rows are
+     restored into the local store — ADD-ONLY: an existing local record always wins, so a
+     half-finished day being edited right now is never overwritten by the server copy. */
+  function mergeDayRecordsFromRemote(remote){
+    var rows=remote&&remote.EOD;
+    if(!rows||!rows.length)return 0;
+    var KEY="me_em_field_reports_v1",db={};
+    try{db=JSON.parse(localStorage.getItem(KEY)||"{}")||{};}catch(e){db={};}
+    var added=0;
+    rows.forEach(function(row){
+      var rec=null;
+      try{rec=JSON.parse(row.EodJson||"null");}catch(e){rec=null;}
+      if(!rec||!rec.date)return;
+      var name=rec.employee||row.EmpName||"";
+      if(!name)return;
+      var id=name+"__"+rec.date;                 // same key shape as recId(emp,date)
+      if(db[id])return;                          // local wins — never clobber live edits
+      db[id]=rec;added++;
+    });
+    if(added){try{localStorage.setItem(KEY,JSON.stringify(db));}catch(e){}}
+    return added;
+  }
+
   // ─── Approvals PUSH (one PJP draft / one deviation) ─────────────────────────
   function pushPjpDraftRow(dr){
     if(!dr||!dr.code||!dr.month)return Promise.resolve({ok:false});
@@ -12521,6 +12767,13 @@ function tadaFillClaimDesigDropdown(){
       try{if(!/admin|hod/i.test(String(res.role||"")))pushTxnNow();}catch(e){}
       // Apply approvals (PJP drafts + deviations) — rep↔HOD cross-device
       try{mergeApprovalsFromRemote(res);}catch(e){}
+      // Restore day records (plan/EOD) so a fresh device can show work saved from another one
+      try{mergeDayRecordsFromRemote(res);}catch(e){}
+      // Catch-up: re-push any autosaved draft the sheet is missing or behind on (same row).
+      try{syncPjpDraftsUp(res);}catch(e){}
+      // A PJP draft may have just arrived from the sheet (autosaved on another device) —
+      // repaint the builder if the rep is looking at it.
+      try{var pjv=document.getElementById("v-pjp");if(pjv&&pjv.classList.contains("active")&&typeof pjpRefresh==="function")pjpRefresh();}catch(e){}
       try{if(typeof updateApprBadge==="function")updateApprBadge();var aw=document.getElementById("sum_approvals_wrap");if(aw&&aw.style.display!=="none"&&typeof renderApprovals==="function")renderApprovals();}catch(e){}
       // If a plan-change approval came back (HOD approved/rejected), re-evaluate the Plan gate so it unlocks.
       try{var pv=document.getElementById("v-plan");if(pv&&pv.classList.contains("active")&&typeof planGate==="function")planGate();}catch(e){}
@@ -12537,6 +12790,15 @@ function tadaFillClaimDesigDropdown(){
       try{localStorage.setItem(LAST_SYNC_KEY,new Date().toISOString());}catch(e){}
       setStatus("synced","☁️ Synced · "+timeShort());
       try{if(typeof applyMaster==="function")applyMaster();}catch(e){}
+      // Masters just changed (and may have been column-repaired) → repaint the pickers that are
+      // built from them, so a rep sitting on the Field tab sees the sheet's data immediately
+      // instead of the stale list they opened the tab with.
+      try{
+        if(typeof fillDistDatalists==="function")fillDistDatalists();
+        var fv=document.getElementById("v-field");
+        if(fv&&fv.classList.contains("active")&&typeof fieldRefresh==="function")fieldRefresh();
+        if(typeof renderMasterSource==="function")renderMasterSource();
+      }catch(e){}
       return res;
     }).catch(function(err){
       setStatus("offline","⚠️ Offline");
