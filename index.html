@@ -2396,6 +2396,19 @@ function focusFor(code,date,town,beat){
 function pjpAutoFill(code,date){
   fillTowns(code,date);
   var hint=document.getElementById("p_pjp_hint");var row=pjpForDate(code,date);
+  // If today's plan-change (deviation) is HOD-APPROVED, the approved NEW city/beat IS the
+  // plan for today \u2014 show it here instead of the old master PJP row.
+  var dev=(typeof planDevRec==="function")?planDevRec(code,date):null;
+  if(dev&&/approved/i.test(String(dev.status||""))&&(Sv(dev.changedCity)||Sv(dev.changedBeat))){
+    hint.className="pjp-hint";
+    hint.textContent="\u270E HOD-approved plan change for "+ddmmyy(date)+" \u2014 aaj ka approved beat niche hai"+(row?(" (original: "+(row.town||"-")+" / "+(row.beat||"-")+")"):"");
+    setv("p_town_pjp",Sv(dev.changedCity)||(row?row.town:""));
+    fillBeats(code,date,elv("p_town_pjp"));
+    setv("p_beat_pjp",Sv(dev.changedBeat)||(row?row.beat:""));
+    var fb=document.getElementById("p_focus_box");if(fb){fb.style.display="none";fb.dataset.focus="";}
+    if(Sv(dev.changedState))setv("p_state_pjp",Sv(dev.changedState));else updateStatePjp(code);
+    return;
+  }
   if(row&&!isOff(row)){
     hint.className="pjp-hint";hint.textContent="\uD83D\uDCC5 "+row.week+" \u2014 as per PJP for "+ddmmyy(date);
     setv("p_town_pjp",row.town);fillBeats(code,date,row.town);setv("p_beat_pjp",row.beat);focusFor(code,date,row.town,row.beat);
@@ -2412,7 +2425,8 @@ function onTownPjp(){var code=elv("p_emp_code"),date=elv("p_date"),town=elv("p_t
 function onBeatPjp(){focusFor(elv("p_emp_code"),elv("p_date"),elv("p_town_pjp"),elv("p_beat_pjp"));}
 function resetHodApproval(){HODstate.decision="";HODstate.sent=false;var s=document.getElementById("p_approve_state");if(s)s.innerHTML="";var ss=document.getElementById("p_send_stage");if(ss)ss.style.display="none";var as=document.getElementById("p_after_send");if(as)as.style.display="none";stopHodTimer();}
 /* ── Plan-deviation approval state (keyed by code__date in the Deviations store) ── */
-function planDevStatus(code,date){if(!code||!date)return "";var arr=(typeof devLoad==="function")?devLoad():[];var id=code+"__"+date;for(var i=0;i<arr.length;i++){if(arr[i].id===id)return String(arr[i].status||"");}return "";}
+function planDevRec(code,date){if(!code||!date)return null;var arr=(typeof devLoad==="function")?devLoad():[];var id=code+"__"+date;for(var i=0;i<arr.length;i++){if(arr[i].id===id)return arr[i];}return null;}
+function planDevStatus(code,date){var r=planDevRec(code,date);return r?String(r.status||""):"";}
 function planDevRemarks(code,date){if(!code||!date)return "";var arr=(typeof devLoad==="function")?devLoad():[];var id=code+"__"+date;for(var i=0;i<arr.length;i++){if(arr[i].id===id)return String(arr[i].hodRemarks||"");}return "";}
 function planDevApproved(code,date){return /approved/i.test(planDevStatus(code,date));}
 /* Submit the plan change for HOD approval → creates/updates a Pending deviation that
