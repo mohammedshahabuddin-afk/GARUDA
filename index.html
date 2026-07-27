@@ -1728,6 +1728,80 @@ button:disabled,select:disabled,input:disabled{opacity:.55;cursor:not-allowed}
 
   <!-- ============ DATA ============ -->
   <section class="view" id="v-data">
+
+    <!-- 📚 MASTER DATA SOURCE — visible to everyone (proves masters come from GARUDA sheet) -->
+    <div class="card" style="border-left:4px solid #0369a1">
+      <h2 style="color:#075985"><span class="dot" style="background:#0369a1"></span>📚 Master Data — GARUDA Sheet</h2>
+      <div class="note" style="margin:0 0 9px">Stores, Distributors, Products, Employees aur PJP sab <b>GARUDA Google Sheet</b> se aate hain (Master_Stores / Master_Distributors …). Neeche live count hai — ✅ = sheet se aaya, ⚠️ = sheet se sync nahi hua.</div>
+      <div id="master_src_out" class="masterbar" style="margin:0 0 9px"></div>
+      <div class="row2">
+        <button class="btn btn-navy" onclick="masterRefreshFromSheet()">🔄 Refresh Masters from Sheet</button>
+        <button class="btn btn-ghost" onclick="renderMasterSource()">↻ Recheck</button>
+      </div>
+      <div class="hint" style="margin-top:6px">Store list aur New-Store distributor picker isi data se bante hain — mapping column <b>EM ASM NAME (EmAsm)</b> hai.</div>
+    </div>
+
+    <!-- 🛠️ DATA AUDIT & REPAIR — Admin/HOD only -->
+    <div class="card adminonly" style="border-left:4px solid #b91c1c">
+      <h2 style="color:#991b1b"><span class="dot" style="background:#b91c1c"></span>🛠️ Data Audit &amp; Repair <span class="hint">— Admin/HOD</span></h2>
+
+      <div class="note" style="margin:0 0 10px;background:#fef2f2;border-left:3px solid #b91c1c;padding:9px 12px;font-size:12px">
+        <b>1 · Ownership repair.</b> Backend har transactional write par <b>EmpCode = jo push kar raha hai</b> stamp karta hai. Agar kisi device me doosre salesman ki rows padi thi, wo unke naam par chali gayin (isi liye "sab data ek hi banda ka dikh raha hai"). Yahan <b>Master_Stores → EM ASM NAME</b> se sahi owner wapas set hota hai.
+      </div>
+      <div class="note" style="margin:0 0 9px;font-size:11.5px;background:#f8fafc;border-left:3px solid #64748b;padding:8px 11px">
+        <b>Sahi order:</b> (1) pehle app ko ☁️ sync hone do — Admin login par saari rows local mirror me aati hain,
+        (2) phir <b>neeche Tool 2</b> se purana test data delete karo, (3) uske baad ye ownership audit chalao —
+        tab sirf naye (asli) rows par kaam hoga.
+      </div>
+      <div class="row2">
+        <button class="btn btn-ghost" onclick="drRunAudit()">🔍 Audit ownership (dry run)</button>
+        <button class="btn btn-navy" onclick="drFixOwnership()">🛠️ Fix &amp; push to sheet</button>
+      </div>
+      <div id="dr_audit_out" class="masterbar" style="margin-top:9px">Audit chalao — pehle sirf report milegi, kuch change nahi hoga.</div>
+
+      <div class="note" style="margin:11px 0 9px;font-size:11.5px;background:#eef2ff;border-left:3px solid #4f46e5;padding:9px 12px">
+        <b>1b · Bulk re-assign (jab store master me store hi nahi hai).</b> Jo rows EmAsm mapping se resolve nahi hoti (store Master_Stores me missing / VACANT), unke liye: <b>date range + galat naam → sahi naam</b>.
+      </div>
+      <div class="row2">
+        <div><label class="hint" style="margin-top:0">Galat owner (from)</label><select id="dr_re_from"><option value="">Employee chuno…</option></select></div>
+        <div><label class="hint" style="margin-top:0">Sahi owner (to)</label><select id="dr_re_to"><option value="">Employee chuno…</option></select></div>
+      </div>
+      <div class="row2" style="margin-top:6px">
+        <div><label class="hint" style="margin-top:0">Date se</label><input type="date" id="dr_re_d1"></div>
+        <div><label class="hint" style="margin-top:0">Date tak</label><input type="date" id="dr_re_d2"></div>
+      </div>
+      <div class="row2" style="margin-top:8px">
+        <button class="btn btn-ghost" onclick="drRePreview()">🔍 Preview</button>
+        <button class="btn btn-navy" onclick="drReApply()">↔️ Re-assign &amp; push</button>
+      </div>
+      <div id="dr_re_out" class="masterbar" style="margin-top:9px">Date khaali chhodo = saari dates.</div>
+
+      <div style="border-top:1px dashed #e3ece5;margin:14px 0 10px"></div>
+
+      <div class="note" style="margin:0 0 10px;background:#fff7ed;border-left:3px solid #ea580c;padding:9px 12px;font-size:12px">
+        <b>2 · Delete an employee's data up to a date.</b> Sheet + is device + <b>baaki sab devices</b> (Master_Config me <code>Purge_Emp_Before</code> rule set hota hai, jisse rows dobara upload bhi nahi hongi). Date <b>us din samet</b> lagti hai.
+      </div>
+      <div class="row2">
+        <div><label class="hint" style="margin-top:0">Employee</label><select id="dr_del_emp"><option value="">Employee chuno…</option></select></div>
+        <div><label class="hint" style="margin-top:0">Date (is din tak, samet)</label><input type="date" id="dr_del_date" value="2026-07-24"></div>
+      </div>
+      <div class="row2" style="margin-top:8px">
+        <button class="btn btn-ghost" onclick="drDeletePreview()">🔍 Preview (kuch delete nahi hoga)</button>
+        <button class="btn" style="background:#b91c1c;color:#fff" onclick="drDeleteApply()">🗑️ Delete Everywhere</button>
+      </div>
+      <button class="btn btn-ghost small" style="margin-top:8px" onclick="drRequestedCleanup()">⚡ One-tap: 24-07-2026 tak ka SAARA purana test data delete karo</button>
+      <div class="hint" style="margin-top:5px">Sheet me ab koi row HIMANSHU ke naam par nahi hai — 22-24 July ki saari rows SOVAN ke naam par shift ho gayi thi (re-branding bug). Isliye naam se delete karne par kuch nahi milega; date se delete karna hi sahi hai.</div>
+      <div id="dr_del_out" class="masterbar" style="margin-top:9px">Employee + date chuno, pehle Preview dabao.</div>
+
+      <div style="border-top:1px dashed #e3ece5;margin:14px 0 10px"></div>
+
+      <div class="note" style="margin:0 0 10px;background:#f0fdf4;border-left:3px solid #16a34a;padding:9px 12px;font-size:12px">
+        <b>3 · Clean this device.</b> Built-in sample/demo rows hatata hai; Employee login par doosre salesman ki purani rows bhi (wo sheet par unke naam se safe hain). Ye har sync ke baad automatic bhi chalta hai.
+      </div>
+      <button class="btn btn-ghost" onclick="txnCleanDevice(true)">🧹 Clean this device now</button>
+      <div id="dr_clean_out" class="masterbar" style="margin-top:9px"></div>
+    </div>
+
     <div class="card adminonly" style="border-left:4px solid #2c5f2d">
       <h2><span class="dot"></span>👥 User Role — Nav Access Control</h2>
       <div class="note" style="margin:0 0 10px">For Testing / Admin: <b>Admin/HOD</b> mode → all tabs open, workflow gating bypassed. In Production/Live switch to <b>Employee</b> mode → chain-wise unlock enforced.</div>
@@ -2176,7 +2250,7 @@ function go(v,el){
   if(v==="plan"){try{renderTodayPjp();}catch(e){}}
   if(v==="field"){syncFieldFromPlan();fieldRefresh();}
   if(v==="eod")prefillEod();
-  if(v==="data"){renderCityApprovals();renderPjpAdmin();renderNsTracker();renderSoTracker();if(typeof _pptFillEmpDropdown==="function")_pptFillEmpDropdown();if(typeof tadaInit==="function")tadaInit();try{if(typeof dlFillEmpDropdown==="function")dlFillEmpDropdown();}catch(e){}try{if(typeof dlUpdateSummary==="function")dlUpdateSummary();}catch(e){}}
+  if(v==="data"){renderCityApprovals();renderPjpAdmin();renderNsTracker();renderSoTracker();try{renderMasterSource();}catch(e){}try{drFillEmpSelect();}catch(e){}try{drReFillSelects();}catch(e){}if(typeof _pptFillEmpDropdown==="function")_pptFillEmpDropdown();if(typeof tadaInit==="function")tadaInit();try{if(typeof dlFillEmpDropdown==="function")dlFillEmpDropdown();}catch(e){}try{if(typeof dlUpdateSummary==="function")dlUpdateSummary();}catch(e){}}
   if(v==="tada"){if(typeof tadaInit==="function")tadaInit();}
   // Apply employee self-only restriction after every tab switch
   try{if(typeof applyEmployeeSelfRestrictionToDropdowns==="function")applyEmployeeSelfRestrictionToDropdowns();}catch(e){}
@@ -2223,8 +2297,36 @@ var HODstate={decision:"",sent:false};var hodTo="me";
 // with a non-empty EmAsm — but that discarded the WHOLE master, incl. PJP, when stores lacked
 // EM ASM, so uploaded PJP showed blank on every device. Beat/distributor features already fall
 // back to "show all" when there's no EmAsm, so the gate was unnecessary and is removed.)
-function loadMaster(){try{var m=JSON.parse(localStorage.getItem(MKEY));if(m&&m.employees&&m.employees.length)return m;}catch(e){}return DEFAULT_MASTER;}
+/* The SYNCED master (GARUDA Google Sheet → me_em_master_v2) is authoritative and is
+   returned AS-IS: Stores / Distributors / Products / PJP always come from the sheet, and
+   an empty section stays empty rather than being back-filled with the built-in snapshot
+   (showing demo stores would look like real data). DEFAULT_MASTER is only the pre-first-sync
+   bootstrap. The "has employees" test is widened to any populated section, so a master with
+   sheet stores but no Employees tab is still honoured. */
+function masterCache(){try{return JSON.parse(localStorage.getItem(MKEY));}catch(e){return null;}}
+function masterHasData(m){
+  if(!m||typeof m!=="object")return false;
+  var secs=["employees","stores","distributors","products","pjp"];
+  for(var i=0;i<secs.length;i++){var a=m[secs[i]];if(a&&a.length)return true;}
+  return false;
+}
+function loadMaster(){var m=masterCache();if(masterHasData(m))return m;return DEFAULT_MASTER;}
 function saveMaster(m){localStorage.setItem(MKEY,JSON.stringify(m));}
+/* Provenance for the Data-tab "Master Data — GARUDA Sheet" panel: which sections actually
+   arrived from the sheet (mergeMasterFromRemote stamps m._src / m._syncedAt). */
+function masterSourceRows(){
+  var cache=masterCache(),synced=masterHasData(cache);
+  var m=loadMaster(),src=(cache&&cache._src)||{};
+  var defs=[["stores","Stores (Master_Stores)"],["distributors","Distributors (Master_Distributors)"],
+            ["products","Products"],["employees","Employees"],["pjp","PJP (Master_PJP)"],["phasing","Phasing"]];
+  return defs.map(function(d){
+    var arr=m[d[0]]||[];
+    // state: "sheet" (proven from GARUDA), "local" (cached/uploaded before provenance was
+    // tracked — one Refresh proves it), "demo" (built-in snapshot, never synced), "empty".
+    var state=!arr.length?"empty":(src[d[0]]==="sheet"?"sheet":(synced?"local":"demo"));
+    return {key:d[0],label:d[1],n:arr.length,state:state,fromSheet:state==="sheet"};
+  });
+}
 function Sv(v){return v===undefined||v===null?"":String(v).trim();}
 function uniq(a){var o=[],s={};a.forEach(function(x){if(x&&!s[x]){s[x]=1;o.push(x);}});return o;}
 function elv(id){var e=document.getElementById(id);return e?e.value:"";}
@@ -8746,25 +8848,58 @@ function _dlInRange(dateStr,from,to){
   if(to&&dateStr>to)return false;
   return true;
 }
+/* Match a record to the requested employee. The dl_emp dropdown can hold either a CODE
+   (normal) or a NAME (synthesized entry when the login isn't in the employee master), while
+   records store code + name separately — so resolve BOTH forms via the master first.
+   Exact-equality on one field only (the old behaviour) silently mixed employees up. */
+function _dlEmpAlias(want){
+  var w=String(want||"").toUpperCase().trim();if(!w)return null;
+  var m=loadMaster(),hit=null;
+  ((m&&m.employees)||[]).forEach(function(e){
+    var c=String(e.code||"").toUpperCase().trim(),n=String(e.name||"").toUpperCase().trim();
+    if(c===w||n===w)hit={code:c,name:n};
+  });
+  return hit;
+}
 function _dlEmpMatch(rec,code){
   if(!rec||!code)return false;
-  return (rec.code&&rec.code===code)||(rec.employee&&rec.employee===code)||(rec.emp&&rec.emp===code)||(rec.empCode&&rec.empCode===code);
+  var want=String(code).toUpperCase().trim();
+  var c=String(rec.code||rec.empCode||"").toUpperCase().trim();
+  var n=String(rec.emp||rec.employee||rec.empName||"").toUpperCase().trim();
+  if((c&&c===want)||(n&&n===want))return true;
+  var a=_dlEmpAlias(want);
+  if(a&&((c&&(c===a.code||c===a.name))||(n&&(n===a.name||n===a.code))))return true;
+  return false;
 }
 function dlCollect(empCode){
   var from=elv("dl_from")||"",to=elv("dl_to")||"";
-  var out={plans:[],secOrders:[],newStores:[],posmEntries:[],stockRemarks:[],dbChanges:[]};
+  var out={plans:[],secOrders:[],newStores:[],posmEntries:[],storeAudits:[],posmReqs:[],stockRemarks:[],dbChanges:[]};
+  // HARD self-scope: on an Employee login the export can only ever contain that person's rows
+  // (txnScopeMine), no matter what the dropdown holds — this is what leaked another salesman's
+  // records into "Download My Data". Admin/HOD are unrestricted, then the emp filter applies.
+  var mine=function(a){return (typeof txnScopeMine==="function")?txnScopeMine(a||[]):(a||[]);};
   // Plans / Field reports
-  try{var db=load();Object.keys(db).forEach(function(k){var r=db[k];if(!r)return;if(!_dlEmpMatch(r,empCode))return;if(!_dlInRange(r.date,from,to))return;out.plans.push(r);});}catch(e){}
+  try{
+    var db=load(),rs=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};
+    Object.keys(db).forEach(function(k){
+      var r=db[k];if(!r)return;
+      if(rs.on&&typeof txnRowIsMine==="function"&&!txnRowIsMine({code:r.code,emp:r.employee||r.emp},rs))return;
+      if(!_dlEmpMatch(r,empCode))return;if(!_dlInRange(r.date,from,to))return;out.plans.push(r);
+    });
+  }catch(e){}
   // Secondary orders
-  try{(soLoad()||[]).forEach(function(o){if(!_dlEmpMatch(o,empCode))return;if(!_dlInRange(o.date,from,to))return;out.secOrders.push(o);});}catch(e){}
+  try{mine(soLoad()).forEach(function(o){if(!_dlEmpMatch(o,empCode))return;if(!_dlInRange(o.date,from,to))return;out.secOrders.push(o);});}catch(e){}
   // New stores
-  try{(nsLoad()||[]).forEach(function(n){if(!_dlEmpMatch(n,empCode))return;if(!_dlInRange(n.date,from,to))return;out.newStores.push(n);});}catch(e){}
-  // POSM entries
-  try{if(typeof poLoad==="function")(poLoad()||[]).forEach(function(p){if(!_dlEmpMatch(p,empCode))return;if(!_dlInRange(p.date,from,to))return;out.posmEntries.push(p);});}catch(e){}
+  try{mine(nsLoad()).forEach(function(n){if(!_dlEmpMatch(n,empCode))return;if(!_dlInRange(n.date,from,to))return;out.newStores.push(n);});}catch(e){}
+  // POSM entries (legacy display/install store)
+  try{if(typeof poLoad==="function")mine(poLoad()).forEach(function(p){if(!_dlEmpMatch(p,empCode))return;if(!_dlInRange(p.date,from,to))return;out.posmEntries.push(p);});}catch(e){}
+  // POSM Store Audits + Requirements (the live POSM tab records)
+  try{if(typeof saLoad==="function")mine(saLoad()).forEach(function(r){if(!_dlEmpMatch(r,empCode))return;if(!_dlInRange(r.date,from,to))return;out.storeAudits.push(r);});}catch(e){}
+  try{if(typeof reqLoad==="function")mine(reqLoad()).forEach(function(r){if(!_dlEmpMatch(r,empCode))return;if(!_dlInRange(r.date,from,to))return;out.posmReqs.push(r);});}catch(e){}
   // Stock remarks
-  try{(stRemLoad()||[]).forEach(function(r){if(!_dlEmpMatch(r,empCode))return;if(!_dlInRange(r.date,from,to))return;out.stockRemarks.push(r);});}catch(e){}
+  try{mine(stRemLoad()).forEach(function(r){if(!_dlEmpMatch(r,empCode))return;if(!_dlInRange(r.date,from,to))return;out.stockRemarks.push(r);});}catch(e){}
   // DB Change requests
-  try{(stDbChgLoad()||[]).forEach(function(r){if(!_dlEmpMatch(r,empCode))return;if(!_dlInRange(r.date,from,to))return;out.dbChanges.push(r);});}catch(e){}
+  try{mine(stDbChgLoad()).forEach(function(r){if(!_dlEmpMatch(r,empCode))return;if(!_dlInRange(r.date,from,to))return;out.dbChanges.push(r);});}catch(e){}
   return out;
 }
 function dlUpdateSummary(){
@@ -8812,6 +8947,8 @@ function downloadMyDataExcel(){
     ["  → Closed",d.secOrders.length-d.secOrders.filter(_isOrderOpen).length],
     ["New Store Recommendations",d.newStores.length],
     ["POSM Entries",d.posmEntries.length],
+    ["POSM Store Audits",d.storeAudits.length],
+    ["POSM Requirements",d.posmReqs.length],
     ["Stock Remarks",d.stockRemarks.length],
     ["DB Change Requests",d.dbChanges.length]
   ];
@@ -8848,6 +8985,17 @@ function downloadMyDataExcel(){
     var poh=["Date","Store Name","Store Type","Client ID","Company Code","City","State","DB Code","DB Name","POSM Type","Location","Status","Remarks","Time"];
     var por=[poh];d.posmEntries.forEach(function(p){por.push([p.date,p.storeName||"",p.storeType||"",p.clientId||"",p.companyCode||"",p.city||"",p.state||"",p.dbCode||"",p.dbName||"",p.posmType||p.type||"",p.location||"",p.status||"",p.remarks||p.reason||"",p.ts||""]);});
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(por),"POSM");
+  }
+  // Sheet 5b/5c: live POSM tab records — Store Audit + Requirement (were missing entirely)
+  if(d.storeAudits.length){
+    var sah=["Date","Store Name","Store Type","City","Company Code","POSM Status","Element","POSM Type","Location","Brand","Asset Type","Period","Dominance","Condition","Visibility","Action","Installed By","Verified By","Verify Date","Remarks","Time"];
+    var sar=[sah];d.storeAudits.forEach(function(r){sar.push([r.date,r.storeName||"",r.storeType||"",r.city||"",r.companyCode||"",r.posmStatus||"",r.element||"",r.posmType||"",r.location||"",r.brand||"",r.assetType||"",r.period||"",r.dominance||"",r.condition||"",r.visibility||"",r.action||"",r.installedBy||"",r.verifiedBy||"",r.verifyDate||"",r.remarks||"",r.ts||""]);});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sar),"POSM_Store_Audit");
+  }
+  if(d.posmReqs.length){
+    var rqh=["Date","Store Name","Store Type","City","Company Code","POSM Required","Remarks","Time"];
+    var rqr=[rqh];d.posmReqs.forEach(function(r){rqr.push([r.date,r.storeName||"",r.storeType||"",r.city||"",r.companyCode||"",r.requirement||"",r.remarks||"",r.ts||""]);});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rqr),"POSM_Requirement");
   }
   // Sheet 6: Stock Remarks
   if(d.stockRemarks.length){
@@ -8895,6 +9043,555 @@ function downloadMyDataExcel(){
   toast("Downloaded: "+fn+" ✓");
 }
 /* ═══════════════ end DOWNLOAD MY DATA MODULE ═══════════════ */
+
+/* ═══════════════ MASTER SOURCE + DATA AUDIT & REPAIR MODULE ═══════════════
+   Three operational needs this covers:
+   1. PROVE the app runs on GARUDA-sheet masters (Stores / Distributors / Products / PJP)
+      and re-pull them on demand — no silent fallback to the built-in demo snapshot.
+   2. REPAIR rows whose owner was overwritten. The backend stamps EmpCode = caller on every
+      transactional write, so a device that held another rep's rows re-branded them on push
+      (that is how "everything shows as <one person>" happens). Truth source for the repair =
+      Master_Stores "EmAsm" (store → owning salesman) + Master_Employees (name → code).
+   3. DELETE one employee's data up to a date EVERYWHERE: the sheet, this device, and every
+      other device — the last part via a Master_Config purge rule, which also stops the
+      owner's phone from re-uploading the rows the admin just deleted.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ---------- Master data source panel (visible to everyone) ---------- */
+function renderMasterSource(){
+  var box=document.getElementById("master_src_out");if(!box)return;
+  var rows=masterSourceRows(),cache=masterCache();
+  var synced=cache&&cache._syncedAt?cache._syncedAt:"";
+  var when="";
+  if(synced){try{var d=new Date(synced);when=isNaN(d)?synced:(ddmmyy(d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()))+" "+d.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}));}catch(e){when=synced;}}
+  var h='<div style="font-size:11.5px;line-height:1.75">';
+  h+='<div style="font-weight:700;margin-bottom:4px">'+(when?("☁️ Last sheet sync: "+escapeHtml(when))
+     :(masterHasData(cache)?"☁️ Local master mil gaya — sync time unknown, <b>Refresh</b> dabao":"⚠️ Abhi tak sheet se sync nahi hua — built-in sample data chal raha hai"))+'</div>';
+  var ICON={sheet:"✅",local:"ℹ️",demo:"⚠️",empty:"⚠️"};
+  var WHAT={sheet:"GARUDA sheet se",local:"local cache (Refresh dabao to confirm)",demo:"built-in sample data — sync nahi hua",empty:"khaali"};
+  rows.forEach(function(r){
+    h+='<div>'+ICON[r.state]+' <b>'+escapeHtml(r.label)+'</b>: '+r.n+' rows <span class="hint">'+WHAT[r.state]+'</span></div>';
+  });
+  // Column-alignment repair report (see _mrRepairStores): the live sheet had its header row
+  // in schema order and its data in Excel order, which silently broke store↔salesman mapping.
+  try{
+    var al=cache&&cache._align;
+    if(al&&(al.storesEmAsm||al.storesDb||al.distRebuilt)){
+      h+='<div style="margin-top:5px;color:#92400e;background:#fffbeb;border-left:3px solid #d97706;padding:6px 9px;border-radius:6px">'
+        +'⚠️ <b>Sheet ke columns shift the</b> — app ne auto-repair kiya: '
+        +(al.storesEmAsm?(al.storesEmAsm+' stores ka EM ASM'):'')
+        +(al.storesDb?((al.storesEmAsm?' · ':'')+al.storesDb+' stores ka Distributor code/name'):'')
+        +(al.distRebuilt?' · Distributor list stores se rebuild ki':'')
+        +'<br><span class="hint">Pakka fix: master Excel ko app ke Data tab se dobara upload karo (wo header-wise likhta hai), ya sheet ka header row data ke order me kar do.</span></div>';
+    }
+    if(al&&al.stores)h+='<div style="margin-top:4px">🗺️ '+al.mappedStores+' / '+al.stores+' stores kisi real salesman se mapped hain (EmAsm)</div>';
+  }catch(e){}
+  // How many of the sheet's stores are mapped to the logged-in salesman (EmAsm) — the number
+  // that actually decides the Field-tab store list and the New-Store distributor picker.
+  try{
+    var me=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};
+    var who=me.on?me.name:drNorm(elv("f_emp"));
+    if(who){
+      var mine=(loadMaster().stores||[]).filter(function(s){return drNorm(s.emAsm)===drNorm(who);});
+      h+='<div style="margin-top:5px">🏪 <b>'+escapeHtml(who)+'</b> ke mapped stores (EmAsm): <b>'+mine.length+'</b>'+(mine.length?"":' <span class="hint">— Master_Stores me EM ASM NAME check karo</span>')+'</div>';
+    }
+  }catch(e){}
+  h+='</div>';
+  box.innerHTML=h;
+}
+/* Force a fresh masters pull (Stores + Distributors first, then the full master set). */
+function masterRefreshFromSheet(){
+  var box=document.getElementById("master_src_out");
+  if(!(window.__sync&&window.__sync.pullSheet)){toast("Sync module load nahi hua");return;}
+  if(box)box.innerHTML='⏳ GARUDA sheet se masters pull ho rahe hain…';
+  window.__sync.pullNow().then(function(res){
+    if(!res||!res.ok){if(box)box.innerHTML='⚠️ Pull fail: '+escapeHtml(String((res&&res.error)||"offline"))+' — internet check karo.';return;}
+    var ns=(res.Master_Stores||[]).length,nd=(res.Master_Distributors||[]).length;
+    try{if(typeof applyMaster==="function")applyMaster();}catch(e){}
+    try{if(typeof fillDistDatalists==="function")fillDistDatalists();}catch(e){}
+    try{if(typeof fieldRefresh==="function")fieldRefresh();}catch(e){}
+    renderMasterSource();
+    toast("✅ Masters refreshed — "+ns+" stores · "+nd+" distributors");
+  });
+}
+
+/* ---------- shared helpers ---------- */
+var DR_PLACEHOLDER_ASM=/^(VACANT|TBA)([_\-\s]|$)/i;
+function drNorm(v){return String(v==null?"":v).trim().toUpperCase();}
+/* Sheet dates arrive as DD-MM-YYYY (app pushes) or ISO/date-time (typed in the sheet). */
+function drISO(v){
+  var s=String(v==null?"":v).trim();if(!s)return "";
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)){
+    if(/\dT\d|\d{1,2}:\d{2}/.test(s)){var d=new Date(s);if(!isNaN(d))return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());}
+    return s.slice(0,10);
+  }
+  var m=s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+  if(m)return m[3]+"-"+pad2(+m[2])+"-"+pad2(+m[1]);
+  var d2=new Date(s);if(!isNaN(d2))return d2.getFullYear()+"-"+pad2(d2.getMonth()+1)+"-"+pad2(d2.getDate());
+  return s;
+}
+function drReadKey(k){try{return JSON.parse(localStorage.getItem(k)||"[]");}catch(e){return [];}}
+function drWriteKey(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){toast("Storage full");return false;}}
+/* Local transactional stores ↔ backend sheets. */
+var DR_TXN=[
+  {key:"me_em_secorders_v1",sheet:"SecOrders",label:"Sec Orders"},
+  {key:"me_em_storeaudit_v1",sheet:"POSM_Audit",label:"POSM Store Audit"},
+  {key:"me_em_posmreq_v1",sheet:"POSM_Requirement",label:"POSM Requirement"},
+  {key:"me_em_newstores_v1",sheet:"NewStores",label:"New Stores"}
+];
+/* Sheets touched by the delete tool (+ which columns carry owner & date). */
+var DR_SHEETS=[
+  {sheet:"SecOrders",code:"EmpCode",name:"EmpName",date:"Date"},
+  {sheet:"POSM_Audit",code:"EmpCode",name:"EmpName",date:"Date"},
+  {sheet:"POSM_Requirement",code:"EmpCode",name:"EmpName",date:"Date"},
+  {sheet:"NewStores",code:"EmpCode",name:"EmpName",date:"Date"},
+  {sheet:"DFR",code:"EmpCode",name:"EmpName",date:"Date"},
+  {sheet:"EOD",code:"EmpCode",name:"EmpName",date:"Date"},
+  {sheet:"TaDa",code:"EmpCode",name:"EmpName",date:"Date"},
+  {sheet:"Photos",code:"EmpCode",name:"Employee",date:"Date"}
+];
+/* Sequential promise runner — Apps Script is happier one request at a time. */
+function drSeq(list,fn){
+  var i=0,out=[];
+  function step(){
+    if(i>=list.length)return Promise.resolve(out);
+    return Promise.resolve(fn(list[i],i)).then(function(r){out.push(r);i++;return step();},
+      function(e){out.push({error:String(e)});i++;return step();});
+  }
+  return step();
+}
+/* store code → owning salesman, straight from Master_Stores.EmAsm (GARUDA sheet).
+   Only codes are used as keys (unique); placeholder owners (VACANT_ / TBA_ prefixes) and
+   EmAsm values that are not real employees are skipped so nothing is ever guessed. */
+function drStoreOwnerIndex(){
+  var m=loadMaster(),out={byStore:{},empByName:{},stores:0,skipped:0};
+  ((m&&m.employees)||[]).forEach(function(e){
+    var n=drNorm(e.name);if(n)out.empByName[n]={code:String(e.code||""),name:String(e.name||"")};
+  });
+  ((m&&m.stores)||[]).forEach(function(s){
+    var asm=drNorm(s.emAsm);
+    if(!asm||DR_PLACEHOLDER_ASM.test(asm)){out.skipped++;return;}
+    var owner=out.empByName[asm];
+    if(!owner){out.skipped++;return;}
+    var hit=false;
+    [s.companyCode,s.clientId].forEach(function(k){var kk=drNorm(k);if(kk){out.byStore[kk]=owner;hit=true;}});
+    if(hit)out.stores++;
+  });
+  return out;
+}
+function drEmpByCode(code){
+  var c=drNorm(code),hit=null;
+  ((loadMaster().employees)||[]).forEach(function(e){if(drNorm(e.code)===c)hit={code:String(e.code||""),name:String(e.name||"")};});
+  return hit;
+}
+
+/* ---------- TOOL 1: ownership audit + re-attribution ---------- */
+function drAuditOwnership(){
+  var idx=drStoreOwnerIndex();
+  var res={fix:[],unresolved:0,ok:0,total:0,mappedStores:idx.stores,sets:[]};
+  DR_TXN.forEach(function(t){
+    var arr=drReadKey(t.key),f=0,u=0,o=0;
+    arr.forEach(function(r){
+      if(!r)return;
+      var sk=drNorm(r.companyCode)||drNorm(r.clientId);
+      var owner=sk?idx.byStore[sk]:null;
+      if(!owner){u++;return;}
+      if(drNorm(r.code)===drNorm(owner.code)){o++;return;}
+      f++;
+      res.fix.push({key:t.key,sheet:t.sheet,label:t.label,id:r.id,date:r.date||"",
+        store:r.storeName||sk,fromCode:String(r.code||""),fromName:String(r.emp||""),
+        toCode:owner.code,toName:owner.name});
+    });
+    res.total+=arr.length;res.unresolved+=u;res.ok+=o;
+    res.sets.push({label:t.label,total:arr.length,fix:f,unresolved:u,ok:o});
+  });
+  return res;
+}
+function drRunAudit(){
+  var out=document.getElementById("dr_audit_out");if(!out)return;
+  var r=drAuditOwnership();
+  var h='<div style="font-size:11.5px;line-height:1.7">';
+  h+='<div><b>Master_Stores mapping:</b> '+r.mappedStores+' stores ka owner (EmAsm) mila</div>';
+  r.sets.forEach(function(s){
+    h+='<div>• <b>'+escapeHtml(s.label)+'</b>: '+s.total+' rows → ✅ sahi '+s.ok+' · 🛠️ galat owner <b>'+s.fix+'</b> · ❔ store master me nahi '+s.unresolved+'</div>';
+  });
+  if(!r.fix.length){
+    h+='<div style="margin-top:6px;color:#1a7a3f;font-weight:700">✅ Koi mis-attributed row nahi mili.</div>';
+  }else{
+    h+='<div class="tbl-scroll" style="margin-top:7px"><table style="font-size:11px"><thead><tr><th>Sheet</th><th>Date</th><th>Store</th><th>Abhi (galat)</th><th>Hona chahiye</th></tr></thead><tbody>';
+    r.fix.slice(0,60).forEach(function(f){
+      h+='<tr><td>'+escapeHtml(f.label)+'</td><td>'+escapeHtml(ddmmyy(f.date))+'</td><td>'+escapeHtml(f.store)+'</td>'
+        +'<td style="color:#b4432f">'+escapeHtml(f.fromName||f.fromCode||"—")+'</td>'
+        +'<td style="color:#1a7a3f;font-weight:700">'+escapeHtml(f.toName)+' ('+escapeHtml(f.toCode)+')</td></tr>';
+    });
+    h+='</tbody></table></div>';
+    if(r.fix.length>60)h+='<div class="hint">…aur '+(r.fix.length-60)+' rows</div>';
+    h+='<div class="hint" style="margin-top:5px">❔ wali rows chhui nahi jayengi (store Master_Stores me nahi hai ya EmAsm VACANT/TBA hai) — kuch guess nahi kiya jata.</div>';
+  }
+  h+='</div>';
+  out.innerHTML=h;
+  window._drLastAudit=r;
+  return r;
+}
+function drFixOwnership(){
+  if(typeof sessionIsAdminHod==="function"&&!sessionIsAdminHod()){toast("🔒 Admin/HOD only");return;}
+  var out=document.getElementById("dr_audit_out");
+  var r=drRunAudit();
+  if(!r||!r.fix.length){toast("Kuch fix karne ko nahi hai");return;}
+  if(typeof confirm!=="undefined"&&!confirm(r.fix.length+" rows ka owner Master_Stores (EmAsm) ke hisaab se theek kiya jayega, aur sheet me bhi update hoga.\n\nContinue?"))return;
+  // 1. local: re-stamp code + emp
+  var byKey={};
+  r.fix.forEach(function(f){(byKey[f.key]=byKey[f.key]||[]).push(f);});
+  var changed=0;
+  Object.keys(byKey).forEach(function(k){
+    var arr=drReadKey(k),map={};
+    byKey[k].forEach(function(f){map[String(f.id)]={code:f.toCode,emp:f.toName};});
+    arr.forEach(function(rec){
+      var t=rec&&map[String(rec.id)];
+      if(t){rec.code=t.code;rec.emp=t.emp;changed++;}
+    });
+    drWriteKey(k,arr);
+  });
+  // 2. sheet: re-push the corrected rows. An Admin/HOD push is NOT re-stamped by the
+  //    backend, and every txn sheet upserts on its id, so rows update in place.
+  if(out)out.innerHTML='⏳ '+changed+' rows local me theek ho gayi — sheet me push ho raha hai…';
+  var p=(window.__sync&&window.__sync.pushTxnNow)?window.__sync.pushTxnNow():Promise.resolve({ok:false,error:"sync off"});
+  p.then(function(res){
+    try{renderSoTracker();renderNsTracker();renderFfList();refreshPendingBanners();}catch(e){}
+    if(out)out.innerHTML='<div style="font-size:11.5px">'+(res&&res.ok?'✅':'⚠️')+' '+changed+' rows ka owner theek hua'
+      +(res&&res.ok?' aur sheet me push ho gaya.':' — sheet push queue me hai (internet aane par jayega): '+escapeHtml(String(res&&res.error||"")))
+      +'<br><span class="hint">Baaki devices ko next sync par sahi owner mil jayega.</span></div>';
+    toast(res&&res.ok?"✅ Ownership repaired":"⚠️ Local fixed, sheet queued");
+  });
+}
+
+/* ---------- TOOL 1b: bulk re-attribution by DATE RANGE (from-employee → to-employee) ----------
+   Needed because the EmAsm mapping cannot resolve a row whose store is missing from
+   Master_Stores (the live master shrank 808 → 145 rows, and stores reps are actively ordering
+   from — DELHI BAZAR, NEO POINT … — are not in it). This is still rule-based, not row-by-row:
+   "every row stamped A between these dates actually belongs to B", previewed before applying. */
+function drReFillSelects(){
+  var emps=(loadMaster().employees||[]).slice().sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""));});
+  var opts=emps.map(function(e){return '<option value="'+escAttr(e.code||"")+'">'+escapeHtml(e.name||"")+' ('+escapeHtml(e.code||"")+')</option>';}).join("");
+  ["dr_re_from","dr_re_to"].forEach(function(id){
+    var sel=document.getElementById(id);if(!sel)return;
+    var cur=sel.value||"";
+    sel.innerHTML='<option value="">Employee chuno…</option>'+opts;
+    if(cur)sel.value=cur;
+  });
+}
+function drReScan(){
+  var fc=elv("dr_re_from"),tc=elv("dr_re_to"),d1=elv("dr_re_d1"),d2=elv("dr_re_d2");
+  if(!fc||!tc){toast("From aur To employee chuno");return null;}
+  if(fc===tc){toast("From aur To same hain");return null;}
+  var from=drEmpByCode(fc),to=drEmpByCode(tc);
+  if(!from||!to){toast("Employee master me nahi mila");return null;}
+  var out={from:from,to:to,d1:d1,d2:d2,rows:[],sets:[]};
+  DR_TXN.forEach(function(t){
+    var arr=drReadKey(t.key),n=0;
+    arr.forEach(function(r){
+      if(!r)return;
+      var c=drNorm(r.code),nm=drNorm(r.emp);
+      if(!((c&&c===drNorm(from.code))||(nm&&nm===drNorm(from.name))))return;
+      var d=drISO(r.date);
+      if(d1&&(!d||d<d1))return;
+      if(d2&&(!d||d>d2))return;
+      n++;out.rows.push({key:t.key,label:t.label,id:r.id,date:d,store:r.storeName||""});
+    });
+    out.sets.push({label:t.label,n:n,total:arr.length});
+  });
+  return out;
+}
+function drRePreview(){
+  var s=drReScan();if(!s)return;
+  var box=document.getElementById("dr_re_out");if(!box)return;
+  var h='<div style="font-size:11.5px;line-height:1.7"><b>'+escapeHtml(s.from.name)+' → '+escapeHtml(s.to.name)+'</b>'
+    +(s.d1||s.d2?(' · '+(s.d1?ddmmyy(s.d1):"…")+' se '+(s.d2?ddmmyy(s.d2):"…")+' tak'):' · saari dates')+'<br>';
+  s.sets.forEach(function(x){h+='• '+escapeHtml(x.label)+': <b>'+x.n+'</b> rows'+(x.total?(' <span class="hint">('+x.total+' total)</span>'):'')+'<br>';});
+  if(!s.rows.length)h+='<span style="color:#b4432f">Koi row nahi mili — dates/employee check karo.</span>';
+  else{
+    h+='<div class="tbl-scroll" style="margin-top:6px"><table style="font-size:11px"><thead><tr><th>Set</th><th>Date</th><th>Store</th></tr></thead><tbody>';
+    s.rows.slice(0,40).forEach(function(r){h+='<tr><td>'+escapeHtml(r.label)+'</td><td>'+escapeHtml(ddmmyy(r.date))+'</td><td>'+escapeHtml(r.store)+'</td></tr>';});
+    h+='</tbody></table></div>';
+    if(s.rows.length>40)h+='<div class="hint">…aur '+(s.rows.length-40)+' rows</div>';
+  }
+  h+='</div>';box.innerHTML=h;
+}
+function drReApply(){
+  if(typeof sessionIsAdminHod==="function"&&!sessionIsAdminHod()){toast("🔒 Admin/HOD only");return;}
+  var s=drReScan();if(!s)return;
+  if(!s.rows.length){toast("Koi row nahi mili");return;}
+  if(typeof confirm!=="undefined"&&!confirm(s.rows.length+" rows ka owner "+s.from.name+" se "+s.to.name+" kiya jayega (sheet me bhi).\n\nContinue?"))return;
+  var box=document.getElementById("dr_re_out");
+  var byKey={},changed=0;
+  s.rows.forEach(function(r){(byKey[r.key]=byKey[r.key]||{})[String(r.id)]=1;});
+  Object.keys(byKey).forEach(function(k){
+    var arr=drReadKey(k);
+    arr.forEach(function(rec){
+      if(rec&&byKey[k][String(rec.id)]){rec.code=s.to.code;rec.emp=s.to.name;changed++;}
+    });
+    drWriteKey(k,arr);
+  });
+  if(box)box.innerHTML='⏳ '+changed+' rows local me re-assign ho gayi — sheet me push ho raha hai…';
+  var p=(window.__sync&&window.__sync.pushTxnNow)?window.__sync.pushTxnNow():Promise.resolve({ok:false,error:"sync off"});
+  p.then(function(res){
+    try{renderSoTracker();renderNsTracker();renderFfList();refreshPendingBanners();}catch(e){}
+    if(box)box.innerHTML='<div style="font-size:11.5px">'+(res&&res.ok?'✅':'⚠️')+' '+changed+' rows ab <b>'+escapeHtml(s.to.name)+'</b> ke naam par hain'
+      +(res&&res.ok?' aur sheet me push ho gayin.':' — sheet push queued: '+escapeHtml(String(res&&res.error||"")))+'</div>';
+    toast(res&&res.ok?"✅ Re-assigned":"⚠️ Local done, sheet queued");
+  });
+}
+
+/* ---------- TOOL 2: delete one employee's data up to a date (sheet + all devices) ---------- */
+function drFillEmpSelect(){
+  var sel=document.getElementById("dr_del_emp");if(!sel)return;
+  var cur=sel.value||"";
+  var emps=(loadMaster().employees||[]).slice().sort(function(a,b){return String(a.name||"").localeCompare(String(b.name||""));});
+  // "__ALL__" exists because rows can carry the WRONG owner (the re-branding bug): after
+  // re-stamping, a name-based delete would miss exactly the rows you want gone. Date-only
+  // deletion is then the reliable option.
+  sel.innerHTML='<option value="">Employee chuno…</option><option value="__ALL__">⚠️ SAB employees (sirf date se)</option>'+emps.map(function(e){
+    return '<option value="'+escAttr(e.code||"")+'">'+escapeHtml(e.name||"")+' ('+escapeHtml(e.code||"")+')</option>';
+  }).join("");
+  if(cur)sel.value=cur;
+  var dt=document.getElementById("dr_del_date");
+  if(dt&&!dt.value)dt.value="2026-07-24";
+}
+function drTarget(){
+  var code=elv("dr_del_emp");
+  if(!code){toast("Employee chuno");return null;}
+  if(code==="__ALL__")return {code:"",name:"",all:true,label:"SAB employees"};
+  var e=drEmpByCode(code);
+  var t=e||{code:String(code),name:String(code)};
+  t.label=t.name;return t;
+}
+function drSheetRowMatches(row,sd,target,cutoff){
+  if(!row)return false;
+  if(!target.all){
+    var c=drNorm(row[sd.code]),n=drNorm(row[sd.name]);
+    var tc=drNorm(target.code),tn=drNorm(target.name);
+    if(!((tc&&c===tc)||(tn&&n===tn)))return false;
+  }
+  var d=drISO(row[sd.date]);
+  if(!d){
+    // No usable date (blank cell) — fall back to a date embedded in the row id (EOD/DFR keys
+    // look like CODE_2026-07-22). If still nothing, leave the row alone.
+    var idv=String(row.Id||row.Key||row.PoNumber||row.StoreId||"");
+    var m=idv.match(/(\d{4}-\d{2}-\d{2})/);d=m?m[1]:"";
+    if(!d)return false;
+  }
+  return d<=cutoff;
+}
+function drLocalRowMatches(rec,target,cutoff){
+  if(!rec)return false;
+  if(!target.all){
+    var c=drNorm(rec.code||rec.empCode),n=drNorm(rec.emp||rec.employee||rec.empName);
+    var tc=drNorm(target.code),tn=drNorm(target.name);
+    if(!((tc&&c===tc)||(tn&&n===tn)))return false;
+  }
+  var d=drISO(rec.date);
+  return !!d&&d<=cutoff;
+}
+function drDeleteLocal(target,cutoff){
+  var removed=0;
+  ["me_em_secorders_v1","me_em_storeaudit_v1","me_em_posmreq_v1","me_em_newstores_v1","me_em_posm_install_v1"].forEach(function(k){
+    var arr=drReadKey(k);if(!arr.length)return;
+    var keep=arr.filter(function(r){return !drLocalRowMatches(r,target,cutoff);});
+    if(keep.length!==arr.length){removed+=(arr.length-keep.length);drWriteKey(k,keep);}
+  });
+  // Plans / EOD reports (object store keyed NAME__DATE)
+  try{
+    var db=load(),ch=0;
+    Object.keys(db).forEach(function(k){
+      var r=db[k];if(!r)return;
+      if(drLocalRowMatches({code:r.code,emp:r.employee||r.emp,date:r.date},target,cutoff)){delete db[k];ch++;}
+    });
+    if(ch){save(db);removed+=ch;}
+  }catch(e){}
+  // TA/DA claims
+  try{
+    if(typeof taLoad==="function"&&typeof taSave==="function"){
+      var cl=taLoad()||[];
+      var keepc=cl.filter(function(c){return !drLocalRowMatches({code:c.empCode||c.code,emp:c.empName||c.emp,date:c.date},target,cutoff);});
+      if(keepc.length!==cl.length){removed+=(cl.length-keepc.length);taSave(keepc);}
+    }
+  }catch(e){}
+  return removed;
+}
+/* Persist the deletion as a rule so EVERY device honours it (and no device re-pushes).
+   Whole-day wipes ride on the existing GLOBAL key `Purge_Before` (which is "strictly before",
+   hence cutoff + 1 day); per-employee wipes use `Purge_Emp_Before` (inclusive). */
+function drNextDay(iso){
+  var d=new Date(String(iso)+"T00:00:00");
+  if(isNaN(d))return iso;
+  d.setDate(d.getDate()+1);
+  return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());
+}
+function drAddPurgeRule(target,cutoff){
+  var m=loadMaster();
+  if(!m.config)m.config={};
+  if(target.all){
+    var gv=drNextDay(cutoff),old=String(m.config.Purge_Before||"");
+    if(old&&old>gv)gv=old;                       // never shrink an existing wider purge
+    m.config.Purge_Before=gv;saveMaster(m);
+    if(!(window.__sync&&window.__sync.push))return Promise.resolve({ok:false,value:"Purge_Before="+gv,error:"sync off"});
+    return window.__sync.push("Master_Config",[{Key:"Purge_Before",Value:gv}],"Key").then(function(res){
+      return {ok:!!(res&&res.ok),value:"Purge_Before = "+gv,error:(res&&res.error)||""};
+    });
+  }
+  var cur=String(m.config.Purge_Emp_Before||"");
+  var parts=cur?cur.split(/[,;\n]+/).map(function(s){return s.trim();}).filter(Boolean):[];
+  var mine=drNorm(target.code)+":"+cutoff;
+  var out=[],replaced=false;
+  parts.forEach(function(p){
+    var ix=p.lastIndexOf(":");
+    if(ix>0&&drNorm(p.slice(0,ix))===drNorm(target.code)){
+      // keep the LATER cutoff so an earlier, smaller rule never shrinks a deletion
+      var old=p.slice(ix+1).trim();
+      out.push(drNorm(target.code)+":"+(old>cutoff?old:cutoff));replaced=true;
+    }else out.push(p);
+  });
+  if(!replaced)out.push(mine);
+  var val=out.join(", ");
+  m.config.Purge_Emp_Before=val;saveMaster(m);
+  if(!(window.__sync&&window.__sync.push))return Promise.resolve({ok:false,value:val,error:"sync off"});
+  return window.__sync.push("Master_Config",[{Key:"Purge_Emp_Before",Value:val}],"Key").then(function(res){
+    return {ok:!!(res&&res.ok),value:val,error:(res&&res.error)||""};
+  });
+}
+function drSyncReady(){
+  if(window.__sync&&window.__sync.pullSheet&&window.__sync.replaceSheet)return true;
+  toast("Sync module ready nahi hai — page reload karo");return false;
+}
+function drDeletePreview(){
+  if(!drSyncReady())return;
+  var t=drTarget();if(!t)return;
+  var cutoff=elv("dr_del_date");if(!cutoff){toast("Date chuno");return;}
+  var out=document.getElementById("dr_del_out");if(!out)return;
+  out.innerHTML='⏳ Sheet check ho raha hai…';
+  var log=['<b>Preview</b> — '+escapeHtml(t.label||t.name)+' · '+ddmmyy(cutoff)+' tak (us din samet)'];
+  var totalSheet=0;
+  drSeq(DR_SHEETS,function(sd){
+    return window.__sync.pullSheet(sd.sheet).then(function(res){
+      if(!res||!res.ok){log.push('⚠️ '+sd.sheet+': padha nahi ja saka ('+escapeHtml(String(res&&res.error||""))+')');return;}
+      var n=(res.rows||[]).filter(function(r){return drSheetRowMatches(r,sd,t,cutoff);}).length;
+      totalSheet+=n;
+      log.push((n?'🗑️ ':'• ')+sd.sheet+': <b>'+n+'</b> rows delete honge <span class="hint">('+(res.rows||[]).length+' total)</span>');
+    });
+  }).then(function(){
+    var loc=0;
+    ["me_em_secorders_v1","me_em_storeaudit_v1","me_em_posmreq_v1","me_em_newstores_v1","me_em_posm_install_v1"].forEach(function(k){
+      loc+=drReadKey(k).filter(function(r){return drLocalRowMatches(r,t,cutoff);}).length;
+    });
+    log.push('🧹 Is device par: <b>'+loc+'</b> local records');
+    log.push('<span class="hint">Sheet total: '+totalSheet+' rows. "Delete Everywhere" dabane par ye hat jayenge + purge rule sab devices par lag jayega.</span>');
+    out.innerHTML='<div style="font-size:11.5px;line-height:1.7">'+log.join("<br>")+'</div>';
+  });
+}
+function drDeleteApply(){
+  if(typeof sessionIsAdminHod==="function"&&!sessionIsAdminHod()){toast("🔒 Admin/HOD only");return;}
+  if(!drSyncReady())return;
+  var t=drTarget();if(!t)return;
+  var cutoff=elv("dr_del_date");if(!cutoff){toast("Date chuno");return;}
+  if(typeof confirm!=="undefined"&&!confirm("⚠️ FINAL: "+(t.label||t.name)+" ka SAARA data "+ddmmyy(cutoff)+" (aur usse pehle) ka DELETE hoga —\n• Google Sheet se\n• is device se\n• baaki sab devices se (purge rule)\n\nUndo nahi hoga. Continue?"))return;
+  var out=document.getElementById("dr_del_out");
+  if(out)out.innerHTML='⏳ Delete chal raha hai — page band na karo…';
+  var log=['<b>Delete</b> — '+escapeHtml(t.label||t.name)+' · '+ddmmyy(cutoff)+' tak'],sheetDel=0,fail=0;
+  drSeq(DR_SHEETS,function(sd){
+    return window.__sync.pullSheet(sd.sheet).then(function(res){
+      if(!res||!res.ok){fail++;log.push('⚠️ '+sd.sheet+': pull fail — skip ('+escapeHtml(String(res&&res.error||""))+')');return;}
+      var rows=res.rows||[],keep=[],drop=0;
+      rows.forEach(function(r){if(drSheetRowMatches(r,sd,t,cutoff))drop++;else keep.push(r);});
+      if(!drop){log.push('• '+sd.sheet+': 0');return;}
+      return window.__sync.replaceSheet(sd.sheet,keep).then(function(rr){
+        if(rr&&rr.ok){sheetDel+=drop;log.push('✅ '+sd.sheet+': '+drop+' rows deleted');}
+        else{fail++;log.push('⚠️ '+sd.sheet+': delete queue me gaya ('+escapeHtml(String(rr&&rr.error||""))+')');}
+      });
+    });
+  }).then(function(){
+    var loc=drDeleteLocal(t,cutoff);
+    log.push('🧹 Is device se '+loc+' local records hataye');
+    return drAddPurgeRule(t,cutoff).then(function(pr){
+      log.push(pr.ok?('📌 Purge rule sheet me set: <b>'+escapeHtml(pr.value)+'</b> — baaki devices next sync par khud clean ho jayenge aur ye rows dobara upload nahi honge.')
+                   :('⚠️ Purge rule local me set hai par sheet me nahi gaya ('+escapeHtml(pr.error)+') — Master_Config me <b>Purge_Emp_Before = '+escapeHtml(pr.value)+'</b> khud add kar do.'));
+      log.push('<b>Total sheet rows deleted: '+sheetDel+'</b>'+(fail?(' · '+fail+' sheet(s) fail/queued — dobara chalao'):''));
+      if(out)out.innerHTML='<div style="font-size:11.5px;line-height:1.7">'+log.join("<br>")+'</div>';
+      try{renderSoTracker();renderNsTracker();renderFfList();refreshPendingBanners();if(typeof renderSaList==="function")renderSaList();if(typeof renderReqList==="function")renderReqList();}catch(e){}
+      toast("🗑️ Delete complete — "+sheetDel+" sheet rows");
+    });
+  });
+}
+
+/* ---------- TOOL 3: clean THIS device ----------
+   Removes (a) the built-in sample/demo rows and (b) on an Employee login, rows that clearly
+   belong to another salesman. Those live on the sheet under their real owner, so nothing is
+   lost — this is what stops foreign records showing up in "Download My Data". Runs
+   automatically after every sync; the button is for doing it right now. */
+var DR_DEMO_IDS={"SO_T1":1,"SO_T2":1,"NS_T1":1};
+/* DELETING is held to a stricter test than HIDING: a row is only removed when its stamp
+   resolves to a DIFFERENT employee who actually exists in the master. A row with an unknown
+   or blank stamp might be the user's own record under a name variant, so it is kept (it stays
+   hidden from every list anyway via txnScopeMine). */
+function drBelongsToOtherEmployee(rec,rs){
+  if(!rec)return false;
+  var c=drNorm(rec.code||rec.empCode),n=drNorm(rec.emp||rec.empName||rec.employee);
+  if(!c&&!n)return false;
+  if((rs.code&&(c===rs.code||n===rs.code))||(rs.name&&(n===rs.name||c===rs.name)))return false;
+  var other=false;
+  ((loadMaster().employees)||[]).forEach(function(e){
+    var ec=drNorm(e.code),en=drNorm(e.name);
+    if(!ec&&!en)return;
+    if(ec===rs.code||en===rs.name)return;              // that's me
+    if((c&&c===ec)||(n&&n===en))other=true;            // a different, known employee
+  });
+  return other;
+}
+function txnCleanDevice(verbose){
+  var rs=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};
+  var demo=0,foreign=0;
+  ["me_em_secorders_v1","me_em_storeaudit_v1","me_em_posmreq_v1","me_em_newstores_v1","me_em_posm_install_v1"].forEach(function(k){
+    var arr=drReadKey(k);if(!arr.length)return;
+    var keep=arr.filter(function(r){
+      if(r&&DR_DEMO_IDS[String(r.id)]){demo++;return false;}
+      if(rs.on&&drBelongsToOtherEmployee(r,rs)){foreign++;return false;}
+      return true;
+    });
+    if(keep.length!==arr.length)drWriteKey(k,keep);
+  });
+  // Field reports / plans of other employees (Employee logins only)
+  if(rs.on){
+    try{
+      var db=load(),ch=0;
+      Object.keys(db).forEach(function(k){
+        var r=db[k];if(!r)return;
+        if(drBelongsToOtherEmployee({code:r.code,emp:r.employee||r.emp},rs)){delete db[k];ch++;}
+      });
+      if(ch){save(db);foreign+=ch;}
+    }catch(e){}
+  }
+  var res={removed:demo+foreign,demo:demo,foreign:foreign,selfOnly:!!rs.on};
+  if(verbose){
+    var out=document.getElementById("dr_clean_out");
+    if(out)out.innerHTML='<div style="font-size:11.5px">🧹 '+res.removed+' records hataye — '+res.demo+' sample/demo'
+      +(res.selfOnly?(' + '+res.foreign+' doosre employee ke'):' (Admin login: doosre employees ka data jaan-boojh kar rakha gaya hai)')+'</div>';
+    try{renderSoTracker();renderNsTracker();renderFfList();refreshPendingBanners();}catch(e){}
+    toast("🧹 "+res.removed+" records cleaned");
+  }
+  return res;
+}
+/* One-tap: wipe ALL data dated 24-07-2026 or earlier.
+   Why ALL and not "HIMANSHU GOEL": in the live sheet (checked 27-07-2026) not a single row is
+   stamped Himanshu any more — the re-branding bug moved every 22-24 Jul row onto SOVAN
+   CHATTERJEE, so a name-based delete would find nothing. The rows are still identifiable by
+   date (they are the only pre-25-Jul data), so date-only deletion is the reliable route and it
+   removes exactly the old test data. */
+function drRequestedCleanup(){
+  var sel=document.getElementById("dr_del_emp"),dt=document.getElementById("dr_del_date");
+  if(sel){drFillEmpSelect();sel.value="__ALL__";}
+  if(dt)dt.value="2026-07-24";
+  drDeleteApply();
+}
+/* ═══════════════ end MASTER SOURCE + DATA AUDIT & REPAIR ═══════════════ */
 
 /* ═══════════════ ATTENDANCE + COMPLIANCE + BEAT + ORDER-AGING + PPT MODULE ═══════════════ */
 
@@ -11428,8 +12125,90 @@ function tadaFillClaimDesigDropdown(){
     if(dmy)return dmy[3]+"-"+pad(dmy[2])+"-"+pad(dmy[1]);
     return s;
   }
+  /* ─── MASTER COLUMN-ALIGNMENT REPAIR ─────────────────────────────────────────
+     Real failure seen in the live sheet on 27-07-2026: Master_Stores / Master_Distributors
+     had their HEADER row in the app's schema order while the pasted DATA sat in the source
+     Excel's column order. Every read was therefore shifted — EmAsm returned a distributor
+     NAME, DbCode returned an enrol DATE — which silently killed the store↔salesman mapping
+     (empty "Select Store" list) and the distributor picker.
+     The repair is value-driven and only acts on unambiguous evidence:
+       • store EmAsm  = the row value that exactly equals a Master_Employees name, else a
+                        VACANT_ / TBA_ placeholder.
+       • DbCode/DbName= the row's 6-9 digit value plus the value immediately after it
+                        (code and name are adjacent in BOTH layouts).
+       • distributors = same rule; and if the Code column is unrecoverable (the live sheet has
+                        a DUPLICATE "LastUpdated" header, which destroys one value on read),
+                        the list is rebuilt from the stores' own DbCode/DbName pairs.
+     Anything unprovable is left exactly as the sheet had it. Values are read positionally via
+     for-in, which preserves the backend's header order. ─────────────────────────────────── */
+  function _mrVals(row){var out=[];for(var k in row){if(Object.prototype.hasOwnProperty.call(row,k))out.push(row[k]);}return out;}
+  function _mrTxt(v){return String(v==null?"":v).trim();}
+  function _mrIsDbCode(v){return /^\d{6,9}$/.test(_mrTxt(v));}
+  function _mrIsDate(v){return /^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}/.test(_mrTxt(v))||/^\d{4}-\d{2}-\d{2}/.test(_mrTxt(v));}
+  function _mrPlaceholder(v){return /^(VACANT|TBA)([_\-\s]|$)/i.test(_mrTxt(v));}
+  function _mrRepairStores(rawRows,mapped,employees){
+    var st={emAsm:0,db:0,mapped:0};
+    if(!rawRows||!rawRows.length||!mapped||!mapped.length)return st;
+    var names={};(employees||[]).forEach(function(e){var n=_mrTxt(e.name).toUpperCase();if(n)names[n]=_mrTxt(e.name);});
+    for(var i=0;i<mapped.length&&i<rawRows.length;i++){
+      var s=mapped[i],vals=_mrVals(rawRows[i]);
+      var cur=_mrTxt(s.emAsm).toUpperCase();
+      if(!(names[cur]||_mrPlaceholder(cur))){
+        var found="",j;
+        for(j=0;j<vals.length;j++){var v=_mrTxt(vals[j]);if(names[v.toUpperCase()]){found=v;break;}}
+        if(!found)for(j=0;j<vals.length;j++){var v2=_mrTxt(vals[j]);if(_mrPlaceholder(v2)){found=v2;break;}}
+        if(found){s.emAsm=found;st.emAsm++;}
+      }
+      if(!_mrIsDbCode(s.dbCode)){
+        for(var k=0;k<vals.length;k++){
+          if(_mrIsDbCode(vals[k])){
+            s.dbCode=_mrTxt(vals[k]);
+            var nx=(k+1<vals.length)?_mrTxt(vals[k+1]):"";
+            if(nx&&!_mrIsDbCode(nx)&&!_mrIsDate(nx))s.dbName=nx;
+            st.db++;break;
+          }
+        }
+      }
+      if(names[_mrTxt(s.emAsm).toUpperCase()])st.mapped++;
+    }
+    return st;
+  }
+  function _mrRepairDistributors(rawRows,mapped,stores){
+    var res={fixed:0,rebuilt:false,list:mapped||[]};
+    (rawRows||[]).forEach(function(raw,i){
+      var d=res.list[i];if(!d||_mrIsDbCode(d.code))return;
+      var vals=_mrVals(raw);
+      for(var k=0;k<vals.length;k++){
+        if(_mrIsDbCode(vals[k])){
+          d.code=_mrTxt(vals[k]);
+          var nx=(k+1<vals.length)?_mrTxt(vals[k+1]):"";
+          if(nx&&!_mrIsDbCode(nx)&&!_mrIsDate(nx))d.name=nx;
+          res.fixed++;break;
+        }
+      }
+    });
+    var good=res.list.filter(function(d){return _mrIsDbCode(d.code)&&_mrTxt(d.name);}).length;
+    if(good<Math.max(3,Math.round(res.list.length*0.3))){
+      var seen={},reb=[];
+      (stores||[]).forEach(function(s){
+        var c=_mrTxt(s.dbCode),n=_mrTxt(s.dbName);
+        if(_mrIsDbCode(c)&&n&&!seen[c]){seen[c]=1;reb.push({code:c,name:n,city:s.city||"",state:s.state||"",emAsm:s.emAsm||"",metroCity:"",zone:"",region:"",asmName:"",asmHq:"",emAsmHq:""});}
+      });
+      if(reb.length){res.list=reb.sort(function(a,b){return a.name.localeCompare(b.name);});res.rebuilt=true;}
+    }
+    return res;
+  }
   function mergeMasterFromRemote(remote){
     var m=readLocalMaster()||{config:{},employees:[],products:[],stores:[],distributors:[],msl:[],phasing:[],pjp:[]};
+    // Provenance: mark every section that really came from the GARUDA sheet, so the Data tab
+    // can prove Stores/Distributors are sheet data and not the built-in demo snapshot.
+    if(!m._src)m._src={};
+    var _mark=function(sec,rows){if(rows&&rows.length)m._src[sec]="sheet";};
+    _mark("config",remote.Master_Config);_mark("employees",remote.Master_Employees);
+    _mark("products",remote.Master_Products);_mark("stores",remote.Master_Stores);
+    _mark("distributors",remote.Master_Distributors);_mark("pjp",remote.Master_PJP);
+    _mark("phasing",remote.Master_Phasing);
+    m._syncedAt=new Date().toISOString();
     // Config: array of {Key,Value} → object
     if(remote.Master_Config&&remote.Master_Config.length){
       remote.Master_Config.forEach(function(kv){if(kv.Key)m.config[kv.Key]=kv.Value;});
@@ -11450,6 +12229,16 @@ function tadaFillClaimDesigDropdown(){
     if(remote.Master_Distributors&&remote.Master_Distributors.length){
       m.distributors=remote.Master_Distributors.map(function(r){return {code:r.Code,name:r.Name,city:r.City||"",metroCity:r.MetroCity||"",zone:r.Zone||"",region:r.Region||"",asmName:r.AsmName||"",asmHq:r.AsmHq||"",emAsm:r.EmAsm||"",emAsmHq:r.EmAsmHq||"",state:r.State};});
     }
+    // Repair shifted columns BEFORE anything reads the mapping (stores first — the
+    // distributor rebuild feeds off the repaired store DbCode/DbName pairs).
+    try{
+      var _as=_mrRepairStores(remote.Master_Stores,m.stores,m.employees);
+      var _ad=_mrRepairDistributors(remote.Master_Distributors,m.distributors,m.stores);
+      m.distributors=_ad.list;
+      m._align={storesEmAsm:_as.emAsm,storesDb:_as.db,mappedStores:_as.mapped,
+                distFixed:_ad.fixed,distRebuilt:!!_ad.rebuilt,
+                stores:(m.stores||[]).length,distributors:(m.distributors||[]).length};
+    }catch(e){}
     // PJP (daily beat plan) — CRITICAL: without this, employees see blank PJP tab
     if(remote.Master_PJP&&remote.Master_PJP.length){
       m.pjp=remote.Master_PJP.map(function(r){return {code:r.Code,zone:r.Zone,date:pullDateToISO(r.Date),week:r.Week,town:r.Town,beat:r.Beat,focus:r.Focus,ww:r.Ww||"",status:r.Status||""};});
@@ -11487,15 +12276,62 @@ function tadaFillClaimDesigDropdown(){
   function purgeBeforeDate(){
     try{var m=JSON.parse(localStorage.getItem("me_em_master_v2")||"null");var v=m&&m.config&&m.config.Purge_Before;return v?pullDateToISO(v):"";}catch(e){return "";}
   }
+  /* PER-EMPLOYEE deletion rules, Master_Config key "Purge_Emp_Before":
+        "HCPL2586:2026-07-24, SOVAN CHATTERJEE:2026-07-20"
+     Meaning: that employee's rows dated ON OR BEFORE the date are deleted everywhere.
+     This is how an admin deletion PROPAGATES: the rule rides in the master config, so every
+     device purges the rows locally on its next pull AND pushTxnNow refuses to re-upload them
+     (otherwise the owner's phone would re-insert the rows the admin just deleted). */
+  function purgeEmpRules(){
+    var out=[];
+    try{
+      var m=JSON.parse(localStorage.getItem("me_em_master_v2")||"null");
+      var v=String((m&&m.config&&m.config.Purge_Emp_Before)||"");
+      if(!v)return out;
+      v.split(/[,;\n]+/).forEach(function(part){
+        var p=String(part||"").trim();if(!p)return;
+        var ix=p.lastIndexOf(":");if(ix<0)return;
+        var who=p.slice(0,ix).trim().toUpperCase(),dt=pullDateToISO(p.slice(ix+1).trim());
+        if(who&&dt)out.push({who:who,upto:dt});
+      });
+    }catch(e){}
+    return out;
+  }
+  function purgeRowMatches(r,cutoff,rules){
+    var d=String((r&&r.date)||"");
+    if(!d)return false;
+    if(cutoff&&d<cutoff)return true;
+    if(!rules||!rules.length)return false;
+    var c=String((r&&(r.code||r.empCode))||"").toUpperCase().trim();
+    var n=String((r&&(r.emp||r.empName||r.employee))||"").toUpperCase().trim();
+    for(var i=0;i<rules.length;i++){
+      var ru=rules[i];
+      if((c&&c===ru.who)||(n&&n===ru.who)){ if(d<=ru.upto)return true; }
+    }
+    return false;
+  }
   var TXN_LOCAL_KEYS=["me_em_secorders_v1","me_em_storeaudit_v1","me_em_posmreq_v1","me_em_newstores_v1","me_em_posm_install_v1"];
   function purgeLocalBefore(cutoff){
-    if(!cutoff)return 0;
+    var rules=purgeEmpRules();
+    if(!cutoff&&!rules.length)return 0;
     var removed=0;
     TXN_LOCAL_KEYS.forEach(function(k){
       var arr=readKey(k);if(!arr.length)return;
-      var keep=arr.filter(function(r){var d=String(r.date||"");return !d||d>=cutoff;});
+      var keep=arr.filter(function(r){return !purgeRowMatches(r,cutoff,rules);});
       if(keep.length!==arr.length){removed+=(arr.length-keep.length);try{localStorage.setItem(k,JSON.stringify(keep));}catch(e){}}
     });
+    // Plans / EOD reports live in an object store keyed NAME__DATE — purge those too.
+    try{
+      var db=JSON.parse(localStorage.getItem("me_em_field_reports_v1")||"null");
+      if(db&&typeof db==="object"){
+        var ch=0;
+        Object.keys(db).forEach(function(k){
+          var r=db[k];if(!r)return;
+          if(purgeRowMatches({date:r.date,code:r.code,emp:r.employee||r.emp},cutoff,rules)){delete db[k];ch++;}
+        });
+        if(ch){removed+=ch;localStorage.setItem("me_em_field_reports_v1",JSON.stringify(db));}
+      }
+    }catch(e){}
     return removed;
   }
   function pushTxnNow(){
@@ -11506,7 +12342,9 @@ function tadaFillClaimDesigDropdown(){
     var d0=new Date();d0.setDate(d0.getDate()-45);
     var winStart=d0.getFullYear()+"-"+String(d0.getMonth()+1).padStart(2,"0")+"-"+String(d0.getDate()).padStart(2,"0");
     var cutoff=purgeBeforeDate();if(cutoff&&cutoff>winStart)winStart=cutoff;
-    function inWindow(r){var d=String(r.date||"");return !d||d>=winStart;}
+    // Rows an admin deleted (purge rules) must NEVER be re-uploaded by the owner's device.
+    var _prules=purgeEmpRules();
+    function inWindow(r){var d=String(r.date||"");if(purgeRowMatches(r,cutoff,_prules))return false;return !d||d>=winStart;}
     function todayOnly(r){return !today||String(r.date||"")===today;}
     // SELF-ONLY PUSH: on an Employee device, push ONLY that employee's rows. The backend
     // force-stamps EmpCode=caller on transactional writes, so pushing a foreign row that
@@ -11571,10 +12409,24 @@ function tadaFillClaimDesigDropdown(){
     function mergeKey(localKey,remoteArr,remoteIdField,localIdOf,mapFn){
       if(!remoteArr||!remoteArr.length)return;
       var local=readKey(localKey);
-      var seen={};local.forEach(function(r){var id=localIdOf(r);if(id!=null&&id!=="")seen[String(id)]=true;});
-      var added=0;
-      remoteArr.forEach(function(row){var id=row[remoteIdField];if(id==null||id==="")return;if(seen[String(id)])return;var rec=mapFn(row);if(!rec)return;local.push(rec);seen[String(id)]=true;added++;});
-      if(added){try{localStorage.setItem(localKey,JSON.stringify(local));}catch(e){}}
+      var seen={};local.forEach(function(r,i){var id=localIdOf(r);if(id!=null&&id!=="")seen[String(id)]=i;});
+      var added=0,reowned=0;
+      remoteArr.forEach(function(row){
+        var id=row[remoteIdField];if(id==null||id==="")return;
+        var ix=seen[String(id)];
+        if(ix!==undefined){
+          /* OWNERSHIP RECONCILE — the sheet is the system of record for WHO owns a row.
+             Without this, a device holding a stale copy keeps re-pushing it and silently
+             undoes an admin's ownership repair (its local stamp still says "mine", so the
+             self-only push filter lets it through). Only the owner fields are taken from
+             remote; every other local field still wins, so unsynced edits survive. */
+          var lr=local[ix],rc=String(row.EmpCode==null?"":row.EmpCode).trim(),rn=String(row.EmpName==null?"":row.EmpName).trim();
+          if(rc&&String(lr.code==null?"":lr.code).trim()!==rc){lr.code=rc;if(rn)lr.emp=rn;reowned++;}
+          return;
+        }
+        var rec=mapFn(row);if(!rec)return;local.push(rec);seen[String(id)]=local.length-1;added++;
+      });
+      if(added||reowned){try{localStorage.setItem(localKey,JSON.stringify(local));}catch(e){}}
     }
     var byId=function(r){return r.id;};
     // PoNumber column doubles as the row key. Legacy rows carry the internal id
@@ -11641,7 +12493,13 @@ function tadaFillClaimDesigDropdown(){
       try{mergeTxnFromRemote(res);}catch(e){}
       // PURGE old/test data: admin sets Master_Config → Purge_Before = YYYY-MM-DD.
       // Local rows older than that are deleted on every device (and never pushed back).
-      try{var _pb=purgeBeforeDate();if(_pb){var _n=purgeLocalBefore(_pb);if(_n){try{renderNsTracker();renderSoTracker();}catch(_e2){}}}}catch(e){}
+      // Runs even without a global Purge_Before — per-employee rules (Purge_Emp_Before) and
+      // the local hygiene sweep below must fire on every device, every sync.
+      try{var _n=purgeLocalBefore(purgeBeforeDate());if(_n){try{renderNsTracker();renderSoTracker();if(typeof refreshPendingBanners==="function")refreshPendingBanners();}catch(_e2){}}}catch(e){}
+      // Employee devices: drop rows that clearly belong to ANOTHER salesman (left behind by an
+      // Admin/HOD session on this browser, or by seeded demo data). They live on the sheet under
+      // their real owner, so nothing is lost — and this stops them leaking into "Download My Data".
+      try{if(typeof txnCleanDevice==="function"){var _c=txnCleanDevice(false);if(_c&&_c.removed){try{renderNsTracker();renderSoTracker();if(typeof refreshPendingBanners==="function")refreshPendingBanners();}catch(_e3){}}}}catch(e){}
       // EMPLOYEE devices: auto-push local rows (45-day window) after every sync, so
       // backdated entries reach the sheet without waiting for a new store-complete.
       // Admin/HOD devices excluded — their local mirror holds everyone's rows and
@@ -11685,6 +12543,18 @@ function tadaFillClaimDesigDropdown(){
       enqueue(payload);setStatus("offline","⚠️ Queued ("+loadQueue().length+")");
       return {ok:false,error:String(err),queued:true};
     });
+  }
+  /* Single-sheet pull. Needed by the admin Data-Repair tools: to DELETE rows from a sheet we
+     must read its current contents, drop the unwanted rows and write the survivors back
+     (replaceSheet). Backend role-filters transactional sheets, so an Employee only ever gets
+     their own rows here — the repair tools are Admin/HOD-gated anyway. */
+  function pullSheetRemote(sheet){
+    var email=currentUserEmail();
+    if(!email)return Promise.resolve({ok:false,error:"no email"});
+    return httpGet({action:"pullSheet",email:email,sheet:sheet}).then(function(res){
+      if(res&&res.ok)return {ok:true,sheet:sheet,rows:res.rows||[]};
+      return {ok:false,sheet:sheet,error:(res&&res.error)||"pullSheet failed",rows:[]};
+    }).catch(function(e){return {ok:false,sheet:sheet,error:String(e),rows:[]};});
   }
   function replaceSheetRemote(sheet,rows){
     var email=currentUserEmail();
@@ -12182,6 +13052,7 @@ function tadaFillClaimDesigDropdown(){
     pushMasterPjp:pushMasterPjpNow,
     pushLoginUser:pushLoginUser,
     replaceSheet:replaceSheetRemote,
+    pullSheet:pullSheetRemote,
     drain:drainQueue,
     setEnabled:setSyncEnabled,
     isEnabled:isSyncEnabled,
