@@ -12276,11 +12276,14 @@ function tadaFillClaimDesigDropdown(){
   function purgeBeforeDate(){
     try{var m=JSON.parse(localStorage.getItem("me_em_master_v2")||"null");var v=m&&m.config&&m.config.Purge_Before;return v?pullDateToISO(v):"";}catch(e){return "";}
   }
-  /* PER-EMPLOYEE deletion rules, Master_Config key "Purge_Emp_Before":
-        "HCPL2586:2026-07-24, SOVAN CHATTERJEE:2026-07-20"
-     Meaning: that employee's rows dated ON OR BEFORE the date are deleted everywhere.
+  /* PER-EMPLOYEE deletion rules, Master_Config key "Purge_Emp_Before". Two forms:
+        "HCPL2586:2026-07-24"                → rows ON OR BEFORE that date
+        "HCPL2599:2026-07-22..2026-07-24"    → only rows INSIDE that window
+     The window form matters: a bare cutoff would also purge rows the admin deliberately KEPT
+     (e.g. a rep's genuine 1-11 July entries) just because they are older than the deleted
+     batch. Ranges keep the guard exactly as wide as the deletion was.
      This is how an admin deletion PROPAGATES: the rule rides in the master config, so every
-     device purges the rows locally on its next pull AND pushTxnNow refuses to re-upload them
+     device purges those rows locally on its next pull AND pushTxnNow refuses to re-upload them
      (otherwise the owner's phone would re-insert the rows the admin just deleted). */
   function purgeEmpRules(){
     var out=[];
@@ -12291,8 +12294,16 @@ function tadaFillClaimDesigDropdown(){
       v.split(/[,;\n]+/).forEach(function(part){
         var p=String(part||"").trim();if(!p)return;
         var ix=p.lastIndexOf(":");if(ix<0)return;
-        var who=p.slice(0,ix).trim().toUpperCase(),dt=pullDateToISO(p.slice(ix+1).trim());
-        if(who&&dt)out.push({who:who,upto:dt});
+        var who=p.slice(0,ix).trim().toUpperCase(),rest=p.slice(ix+1).trim();
+        if(!who||!rest)return;
+        var rng=rest.split("..");
+        if(rng.length===2){
+          var f=pullDateToISO(rng[0].trim()),t=pullDateToISO(rng[1].trim());
+          if(f&&t)out.push({who:who,from:f,upto:t});
+        }else{
+          var dt=pullDateToISO(rest);
+          if(dt)out.push({who:who,from:"",upto:dt});
+        }
       });
     }catch(e){}
     return out;
@@ -12306,7 +12317,10 @@ function tadaFillClaimDesigDropdown(){
     var n=String((r&&(r.emp||r.empName||r.employee))||"").toUpperCase().trim();
     for(var i=0;i<rules.length;i++){
       var ru=rules[i];
-      if((c&&c===ru.who)||(n&&n===ru.who)){ if(d<=ru.upto)return true; }
+      if((c&&c===ru.who)||(n&&n===ru.who)){
+        if(ru.from){if(d>=ru.from&&d<=ru.upto)return true;}
+        else if(d<=ru.upto)return true;
+      }
     }
     return false;
   }
