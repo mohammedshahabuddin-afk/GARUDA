@@ -3115,13 +3115,20 @@ function stateCode(name){
 }
 function idgenLoad(key){try{return JSON.parse(localStorage.getItem(key)||"{}");}catch(e){return {};}}
 function idgenSave(key,obj){try{localStorage.setItem(key,JSON.stringify(obj));return true;}catch(e){toast("Storage full");return false;}}
+/* Auto Order/PO number: EMPO<clientId><NN>, series kept per store in localStorage.
+   Also de-duped against PO numbers already present in the local order store, so a
+   re-installed app / cleared idgen counter can never re-issue a live PO number
+   (the sheet upserts on PoNumber — a duplicate would overwrite a real order). */
 function nextPoNumber(clientId){
-  var cid=String(clientId||"").trim();
+  var cid=String(clientId||"").trim().replace(/\s+/g,"");
   if(!cid)cid="NA";
   var m=idgenLoad(IDGEN_PO_KEY);
-  var next=(m[cid]||0)+1;
+  var used={};
+  try{(soLoad()||[]).forEach(function(r){if(r&&r.poNumber)used[String(r.poNumber).toUpperCase()]=true;});}catch(e){}
+  var next=(m[cid]||0)+1,po="EMPO"+cid+String(next).padStart(2,"0");
+  for(var g=0;g<999&&used[po.toUpperCase()];g++){next++;po="EMPO"+cid+String(next).padStart(2,"0");}
   m[cid]=next;idgenSave(IDGEN_PO_KEY,m);
-  return "EMPO"+cid+String(next).padStart(2,"0");
+  return po;
 }
 function nextNewStoreId(stateName,dateISO){
   var sc=stateCode(stateName);
@@ -3522,15 +3529,10 @@ var SO_STATUSES=["Order in Process","Billing Done","No Order","Cancel Order"];
 var SO_REASONS=["Stock Issue","Transport Issue","Overdue","Collection Issue","Damage & Expiry issue","Official Issue"];
 function soStatusColor(s){return s==="Billing Done"?"#1a7a3f":((s==="Cancel Order"||s==="No Order")?"#b4432f":"#2a4d8f");}
 function renderSoTracker(){
-  var box=document.getElementById("so_tracker");if(!box)return;var list=soLoad();
-  // Employee self-only: filter to only their own records
+  var box=document.getElementById("so_tracker");if(!box)return;
+  // Employee self-only: only their own records (shared matcher — see txnScopeMine)
   var restrict=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};
-  if(restrict.on){
-    list=list.filter(function(r){
-      var e=String(r.emp||r.code||r.empCode||r.employee||"").toUpperCase().trim();
-      return e===restrict.code||e===restrict.name;
-    });
-  }
+  var list=txnScopeMine(soLoad());
   if(!list.length){box.innerHTML='<div class="note" style="margin:0">'+(restrict.on?'No secondary order added by you yet.':'No secondary order yet.')+'</div>';return;}
   var h="";
   list.slice().reverse().forEach(function(r){
@@ -3540,7 +3542,7 @@ function renderSoTracker(){
     h+='<div style="border:1px solid #e3ece5;border-radius:10px;padding:10px;margin-bottom:9px">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-weight:700">'+escapeHtml(r.storeName)+' <span class="hint">('+escapeHtml(r.storeType)+')</span></span><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;color:#fff;background:'+soStatusColor(st)+'">'+escapeHtml(st)+'</span></div>';
     var _src=r.source||"Store Visit";var _telp=(_src==="Telephonic Call");
-    h+='<div style="margin:4px 0 0"><span style="font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px;color:#fff;background:'+(_telp?"#7A5AF8":"#0E4F3B")+'">'+(_telp?"\ud83d\udcde Telephonic Call":"\ud83c\udfea Store Visit")+'</span></div>';
+    h+='<div style="margin:4px 0 0"><span style="font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px;color:#fff;background:'+(_telp?"#7A5AF8":"#0E4F3B")+'">'+(_telp?"\ud83d\udcde Telephonic Call":"\ud83c\udfea Store Visit")+'</span>'+(r.poNumber?('<span style="margin-left:6px;font-size:10.5px;font-weight:700;color:#1d3fb3">\ud83c\udd94 PO: '+escapeHtml(r.poNumber)+'</span>'):"")+'</div>';
     h+='<div class="note" style="margin:3px 0 7px">'+ddmmyy(r.date)+' \u00b7 '+escapeHtml(r.city||"")+' \u00b7 '+r.lines.length+' SKU \u00b7 '+r.totUnits+' units \u00b7 NSV \u20b9'+(r.totNsv||0).toFixed(4)+' L \u00b7 '+escapeHtml(r.emp)+'</div>';
     h+='<div class="row2"><div><label class="hint" style="margin-top:0">Status</label><select onchange="soSetStatus(\''+r.id+'\',this.value)">'+sop+'</select></div><div><label class="hint" style="margin-top:0">Cancel Reason</label><select onchange="soSetReason(\''+r.id+'\',this.value)">'+rop+'</select></div></div>';
     h+='<label class="hint" style="margin-top:6px">Remarks</label><input type="text" value="'+escAttr(r.remarks||"")+'" onchange="soSetRemarks(\''+r.id+'\',this.value)" placeholder="Remarks">';
@@ -3552,7 +3554,7 @@ function soSetStatus(id,v){var l=soLoad();for(var i=0;i<l.length;i++)if(l[i].id=
 function soSetReason(id,v){var l=soLoad();for(var i=0;i<l.length;i++)if(l[i].id===id){l[i].cancelReason=v;break;}soSave(l);}
 function soSetRemarks(id,v){var l=soLoad();for(var i=0;i<l.length;i++)if(l[i].id===id){l[i].remarks=v;break;}soSave(l);}
 function soWorkbook(){
-  var list=soLoad();
+  var list=txnScopeMine(soLoad());
   var head=["Order / PO #","Date","Employee","Emp Code","Order Source","Store Type","Client Id","Company Code","Store Name","City","State","Distributor Code","Distributor Name","Product Code","Product Name","Brand","Target Brand","Category","Sub Category","MRP","UOM","Order Units","Order Value","Order NSV (Lakh)","Status","Cancel Reason","Remarks"];
   var aoa=[head];
   list.forEach(function(r){
@@ -3562,17 +3564,17 @@ function soWorkbook(){
   });
   var wb=XLSX.utils.book_new();var ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=head.map(function(h){return {wch:h==="Order / PO #"?18:14};});XLSX.utils.book_append_sheet(wb,ws,"Secondary Order Report");return wb;
 }
-function downloadSecOrderExcel(){if(typeof XLSX==="undefined"){toast("Excel library load nahi hua");return;}if(!soLoad().length){toast("Koi secondary order nahi hai");return;}XLSX.writeFile(soWorkbook(),"Secondary_Order_"+todayISO()+".xlsx");}
+function downloadSecOrderExcel(){if(typeof XLSX==="undefined"){toast("Excel library load nahi hua");return;}if(!txnScopeMine(soLoad()).length){toast("Koi secondary order nahi hai");return;}XLSX.writeFile(soWorkbook(),"Secondary_Order_"+todayISO()+".xlsx");}
 function soExcelBlob(){var out=XLSX.write(soWorkbook(),{bookType:"xlsx",type:"array"});return new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});}
 function shareSecOrderExcel(){
   if(typeof XLSX==="undefined"){toast("Excel library load nahi hua");return;}
-  if(!soLoad().length){toast("Koi secondary order nahi hai");return;}
+  if(!txnScopeMine(soLoad()).length){toast("Koi secondary order nahi hai");return;}
   try{shareOrDownloadExcel(soExcelBlob(),"Secondary_Order_"+todayISO()+".xlsx","Secondary Order Report","Daily secondary order report \u2014 please process.");}
   catch(e){toast("Excel failed: "+(e&&e.message||e));}
 }
 function downloadSoTrackerExcel(){
   if(typeof XLSX==="undefined"){toast("Excel library load nahi hua");return;}
-  if(!soLoad().length){toast("Koi secondary order nahi hai");return;}
+  if(!txnScopeMine(soLoad()).length){toast("Koi secondary order nahi hai");return;}
   try{blobDownload(soExcelBlob(),"Secondary_Order_"+todayISO()+".xlsx");toast("\ud83d\udce5 Sec Order report downloaded");}
   catch(e){toast("Excel failed: "+(e&&e.message||e));}
 }
@@ -4983,8 +4985,13 @@ function ffEdit(id){
 }
 function renderFfList(){
   var box=document.getElementById("ff_list");if(!box)return;
-  var fin=ffIsFinal();var l=soLoad().slice().reverse();
+  // Self-only: an Employee sees ONLY their own orders here (see txnScopeMine).
+  var fin=ffIsFinal();var _all=soLoad();var l=txnScopeMine(_all).slice().reverse();
   var head=fin?'<div class="note" style="margin:0 0 8px;color:#1a7a3f;font-weight:700">\u2705 Day finalized \u2014 locked (edit band)</div>':'';
+  // Say it out loud when rows were hidden \u2014 a silent filter would look like data loss
+  // if a login's name/code ever failed to match the records.
+  var _hid=_all.length-txnScopeMine(_all).length;
+  if(_hid>0)head+='<div class="note" style="margin:0 0 8px;color:#1e40af;background:#eff6ff;border-left:3px solid #60a5fa;padding:6px 9px;border-radius:6px">\ud83d\udd12 Sirf <b>aapke</b> orders dikh rahe hain \u2014 '+_hid+' doosre employee ke record chhipaye gaye.</div>';
   if(!l.length){box.innerHTML=head+'<div class="note" style="margin:0">Abhi koi visit punch nahi hua.</div>';return;}
   var h=head,tot=0;
   l.forEach(function(r){
@@ -4992,6 +4999,7 @@ function renderFfList(){
     var telp=(r.source==="Telephonic Call");
     h+='<div style="border:1px solid #e3ece5;border-radius:10px;padding:9px;margin-bottom:9px">';
     h+='<div style="display:flex;justify-content:space-between;gap:6px;align-items:center"><span style="font-weight:700;font-size:12.5px">'+escapeHtml(r.storeName||"")+' <span class="hint">('+escapeHtml(r.storeType||"")+')</span></span><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;color:#fff;background:'+(telp?"#7A5AF8":"#0E4F3B")+'">'+(telp?"\ud83d\udcde Tel":"\ud83c\udfea Visit")+'</span></div>';
+    if(r.poNumber)h+='<div style="margin:3px 0 0;font-size:11px;color:#1d3fb3;font-weight:700;letter-spacing:.3px">\ud83c\udd94 PO: '+escapeHtml(r.poNumber)+'</div>';
     if(r.status==="No Order"||r.status==="Cancel Order")h+='<div class="note" style="margin:3px 0 6px">'+escapeHtml(r.status)+' \u2014 '+escapeHtml(r.cancelReason||"")+'</div>';
     else h+='<div class="note" style="margin:3px 0 6px">'+(r.lines?r.lines.length:0)+' SKU \u00b7 '+(r.totUnits||0)+' u \u00b7 NSV \u20b9'+(r.totNsv||0).toFixed(4)+' L \u00b7 <b>'+escapeHtml(r.status||"")+'</b></div>';
     if(!fin){
@@ -5035,7 +5043,7 @@ function soPushOne(rec){
   try{
     if(!rec||!(window.__sync&&window.__sync.push))return;
     window.__sync.push("SecOrders",[{
-      PoNumber:rec.id,Date:rec.date,EmpCode:rec.code,EmpName:rec.emp,
+      PoNumber:rec.poNumber||rec.id,Date:rec.date,EmpCode:rec.code,EmpName:rec.emp,
       OrderSource:rec.source||"Store Visit",StoreType:rec.storeType,ClientId:rec.clientId,
       CompanyCode:rec.companyCode,StoreName:rec.storeName,City:rec.city,State:rec.state,
       DbCode:rec.dbCode,DbName:rec.dbName,Status:rec.status,CancelReason:rec.cancelReason||"",
@@ -5070,7 +5078,7 @@ function ffCloseDay(){
   var out=document.getElementById("ff_out");if(out)out.innerHTML=msgActions(buildDayMsg(),"Send day report to HOD/manager",false);
 }
 function buildDayMsg(){
-  var l=soLoad();var tot=l.reduce(function(a,r){return a+(r.totNsv||0);},0);
+  var l=txnScopeMine(soLoad());var tot=l.reduce(function(a,r){return a+(r.totNsv||0);},0);
   var L=["*Honasa EB \u2014 Day Order Report*"];
   if(l[0])L.push(ddmmyy(l[0].date)+" \u00b7 "+(l[0].emp||""));
   L.push(l.length+" stores \u00b7 NSV \u20b9"+tot.toFixed(4)+" L");L.push("");
@@ -5180,7 +5188,7 @@ function capturePhoto(){
 function renderFfCurrent(){
   var box=document.getElementById("ff_current");if(!box)return;
   if(ffIsFinal()){box.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">\u2705 <b>Day finalized</b> \u2014 sab orders lock. Naye din fresh start.</div></div>';return;}
-  var l=soLoad();var tot=l.reduce(function(a,r){return a+(r.totNsv||0);},0);
+  var l=txnScopeMine(soLoad());var tot=l.reduce(function(a,r){return a+(r.totNsv||0);},0);
   var h='<div class="card" style="border-left:4px solid #C8A24B"><div class="note" style="margin:0">\ud83d\udccd Order <b>Field tab</b> me punch hota hai. Yahaan aaj ke order <b>modify</b> (units/value/status/cancel), <b>Save</b> aur <b>POSM</b> par jao.'+(l.length?(' \u2014 abhi tak <b>'+l.length+'</b> visits \u00b7 NSV \u20b9'+tot.toFixed(4)+' L'):'')+'</div>';
   h+='<div class="row2" style="margin-top:10px"><button class="btn btn-ghost" onclick="ffSaveLocal()">\ud83d\udcbe Save</button><button class="btn btn-navy" onclick="ffProceedToPosm()">Proceed to POSM \u2192</button></div>';
   h+='<div class="hint" style="margin-top:6px">Click karte hi is store ka order <b>auto-save</b> ho ke POSM khul jayega.</div>';
@@ -5469,12 +5477,18 @@ function ffSubmit(){
     lines=pend.lines.map(function(o){var val=(o.value!=null&&o.value!=="")?num(o.value):num(o.units)*num(o.mrp);var nsv=val*0.6/100000;totUnits+=num(o.units);totNsv+=nsv;return {code:o.code,name:o.name,brand:o.brand,targetBrand:o.targetBrand,category:o.category,subCategory:o.subCategory,mrp:o.mrp,uom:o.uom,units:num(o.units),value:val,nsvLakh:+nsv.toFixed(4)};});
   }
   var s=pend.store||{};
-  var rec={id:pend.editId||("SO_"+Date.now()),code:pend.code,emp:pend.emp,date:pend.date,storeType:s.storeType||"",clientId:s.clientId||"",companyCode:s.companyCode||"",storeName:s.storeName||"",city:s.city||"",state:s.state||"",dbCode:s.dbCode||"",dbName:s.dbName||"",source:pend.source||"Store Visit",status:pend.status,cancelReason:pend.cancelReason||pend.reason||"",remarks:pend.remarks||"",lines:lines,totUnits:totUnits,totNsv:+totNsv.toFixed(4),photoStore:(pend.photos&&pend.photos.store)||"",photoDisplay:(pend.photos&&pend.photos.display)||"",ts:nowTime()};
   var l=soLoad();
+  // AUTO ORDER / PO NUMBER. This is the live save path (Field → Submit), so the PO is
+  // issued here — re-saving the SAME order (edit) keeps the PO it was first issued.
+  var _po="";
+  if(pend.editId){for(var pi=0;pi<l.length;pi++){if(l[pi].id===pend.editId){_po=l[pi].poNumber||"";break;}}}
+  if(!_po){try{_po=nextPoNumber(s.clientId||s.companyCode||s.code||"");}catch(e){_po="";}}
+  var rec={id:pend.editId||("SO_"+Date.now()),poNumber:_po,code:pend.code,emp:pend.emp,date:pend.date,storeType:s.storeType||"",clientId:s.clientId||"",companyCode:s.companyCode||"",storeName:s.storeName||"",city:s.city||"",state:s.state||"",dbCode:s.dbCode||"",dbName:s.dbName||"",source:pend.source||"Store Visit",status:pend.status,cancelReason:pend.cancelReason||pend.reason||"",remarks:pend.remarks||"",lines:lines,totUnits:totUnits,totNsv:+totNsv.toFixed(4),photoStore:(pend.photos&&pend.photos.store)||"",photoDisplay:(pend.photos&&pend.photos.display)||"",ts:nowTime()};
   if(pend.editId){var ix=-1;for(var i=0;i<l.length;i++){if(l[i].id===pend.editId){ix=i;break;}}if(ix>=0)l[ix]=rec;else l.push(rec);}
   else l.push(rec);
   soSave(l);
   var savedName=rec.storeName||"Store";
+  var poNote=rec.poNumber?('<div style="margin:8px 0 0;padding:7px 11px;background:#eff6ff;border:1px dashed #60a5fa;border-radius:8px;font-size:12.5px"><span style="color:#1e40af">🆔 <b>Order / PO #:</b> </span><b style="color:#1d3fb3;letter-spacing:.5px">'+escapeHtml(rec.poNumber)+'</b> <span class="hint" style="margin-left:6px">(auto)</span></div>'):"";
   _ffPending=null;_editSoId=null;_editPhotos=null;_editMeta=null;
   try{osResetOrder();}catch(e){}
   osShowPunchForm();
@@ -6716,17 +6730,17 @@ function eodBuildDayWorkbook(){
   XLSX.utils.book_append_sheet(wb,dfrWs,"DFR");
 
   // ── Sec Orders (line-wise) ──
-  var soHead=["Date","Emp Code","Employee","Store","Store Type","City","Company Code","Distributor Code","Distributor Name","Status","SKU Code","SKU Name","Brand","Category","MRP","Units","Value(Rs)"].concat(EOD_MGR_HEAD);
+  var soHead=["PO Number","Date","Emp Code","Employee","Store","Store Type","City","Company Code","Distributor Code","Distributor Name","Status","SKU Code","SKU Name","Brand","Category","MRP","Units","Value(Rs)"].concat(EOD_MGR_HEAD);
   var soRows=[soHead];
   (D.orders||[]).forEach(function(o){
-    var mg=eodMgrCols(o.emp);
-    if(o.lines&&o.lines.length){o.lines.forEach(function(l){soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status,l.code,l.name,l.brand,l.category,num(l.mrp),num(l.units),num(l.value)].concat(mg));});}
-    else{soRows.push([ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status||"No Order","","","","","","",""].concat(mg));}
+    var mg=eodMgrCols(o.emp);var po=o.poNumber||"";
+    if(o.lines&&o.lines.length){o.lines.forEach(function(l){soRows.push([po,ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status,l.code,l.name,l.brand,l.category,num(l.mrp),num(l.units),num(l.value)].concat(mg));});}
+    else{soRows.push([po,ddmmyy(o.date),o.code,o.emp,o.storeName,o.storeType,o.city,o.companyCode,o.dbCode,o.dbName,o.status||"No Order","","","","","","",""].concat(mg));}
   });
   var soWs=XLSX.utils.aoa_to_sheet(soRows);
   // Long numeric-looking codes must be TEXT, else Excel truncates / shows scientific notation.
-  // Sec Orders cols: Company Code(6), Distributor Code(7), SKU Code(10).
-  eodColsToText(soWs,[6,7,10]);
+  // Sec Orders cols (PO Number now col 0): Company Code(7), Distributor Code(8), SKU Code(11).
+  eodColsToText(soWs,[7,8,11]);
   XLSX.utils.book_append_sheet(wb,soWs,"Sec Orders");
 
   // ── New Stores ──
@@ -7053,7 +7067,10 @@ function saNoSave(){
   renderPoContext();toast("💾 "+savedName+" saved (POSM Not Installed)");renderSaList();
   posmShowActionBar();
 }
-function saToday(){var emp=elv("po_emp"),date=elv("po_date");return saLoad().filter(function(r){return (!date||r.date===date)&&(!emp||r.emp===emp);});}
+/* Employee scope first (never another salesman's audits), then the picked emp/date.
+   The emp match accepts NAME or CODE — the po_emp dropdown carries a name normally,
+   but a code when it is self-locked before the master has loaded. */
+function saToday(){var emp=String(elv("po_emp")||"").toUpperCase().trim(),date=elv("po_date");return txnScopeMine(saLoad()).filter(function(r){var e1=String(r.emp||"").toUpperCase().trim(),e2=String(r.code||"").toUpperCase().trim();return (!date||r.date===date)&&(!emp||e1===emp||e2===emp);});}
 function renderSaList(){
   var box=document.getElementById("sa_list");if(!box)return;var l=saToday();
   var acts=document.getElementById("sa_list_actions");if(acts)acts.style.display=l.length?"flex":"none";
@@ -7122,7 +7139,7 @@ function reqSave(){
   renderReqContext();toast("💾 "+savedName+" Requirement saved");renderReqList();
   posmShowActionBar();
 }
-function reqToday(){var emp=elv("po_emp"),date=elv("po_date");return reqLoad().filter(function(r){return (!date||r.date===date)&&(!emp||r.emp===emp);});}
+function reqToday(){var emp=String(elv("po_emp")||"").toUpperCase().trim(),date=elv("po_date");return txnScopeMine(reqLoad()).filter(function(r){var e1=String(r.emp||"").toUpperCase().trim(),e2=String(r.code||"").toUpperCase().trim();return (!date||r.date===date)&&(!emp||e1===emp||e2===emp);});}
 function renderReqList(){
   var box=document.getElementById("req_list");if(!box)return;var l=reqToday();
   var acts=document.getElementById("req_list_actions");if(acts)acts.style.display=l.length?"flex":"none";
@@ -7137,8 +7154,8 @@ function reqWhatsApp(){var l=reqToday();if(!l.length){toast("No Requirement reco
 
 /* ---- POSM MASTER (Data tab — admin aggregate of Store Audit + Requirement) ---- */
 function pmFiltered(list){var from=elv("pm_from"),to=elv("pm_to");return list.filter(function(r){if(from&&r.date<from)return false;if(to&&r.date>to)return false;return true;});}
-function pmSaList(){return pmFiltered(saLoad());}
-function pmReqList(){return pmFiltered(reqLoad());}
+function pmSaList(){return pmFiltered(txnScopeMine(saLoad()));}
+function pmReqList(){return pmFiltered(txnScopeMine(reqLoad()));}
 function posmMasterWorkbook(){var wb=XLSX.utils.book_new();var ws1=XLSX.utils.aoa_to_sheet(saAoa(pmSaList()));ws1["!cols"]=[{wch:11},{wch:10},{wch:18},{wch:13},{wch:22},{wch:12},{wch:12},{wch:13},{wch:16},{wch:12},{wch:14},{wch:16},{wch:14},{wch:14},{wch:16},{wch:12},{wch:14},{wch:14},{wch:12},{wch:12},{wch:11},{wch:14},{wch:14},{wch:26}];XLSX.utils.book_append_sheet(wb,ws1,"Store Audit");var ws2=XLSX.utils.aoa_to_sheet(reqAoa(pmReqList()));ws2["!cols"]=[{wch:11},{wch:10},{wch:18},{wch:22},{wch:12},{wch:12},{wch:13},{wch:20},{wch:30}];XLSX.utils.book_append_sheet(wb,ws2,"POSM Requirement");return wb;}
 function downloadPosmMasterExcel(){if(typeof XLSX==="undefined"){toast("Excel library not loaded");return;}var a=pmSaList(),b=pmReqList();if(!a.length&&!b.length){toast("No POSM records in this range");return;}XLSX.writeFile(posmMasterWorkbook(),"POSM_Master_"+todayISO()+".xlsx");var st=document.getElementById("pm_admin_status");if(st)st.textContent="✅ Downloaded — "+a.length+" Store Audit + "+b.length+" Requirement rows";}
 function posmMasterSummaryText(){var a=pmSaList(),b=pmReqList();var from=elv("pm_from"),to=elv("pm_to");var L=["*POSM Master Summary*"];if(from||to)L.push((from||"…")+" to "+(to||"…"));L.push("");L.push("📋 Store Audit: "+a.length+" entries");L.push("🪧 POSM Requirement: "+b.length+" entries");var reqYes=b.filter(function(r){return r.requirement==="Yes";}).length;var reqNo=b.length-reqYes;L.push("   ✅ Requirement Yes: "+reqYes+" · ❌ No: "+reqNo);var actionNeeded=a.filter(function(r){return r.action&&r.action!=="No Action";}).length;if(actionNeeded)L.push("⚠️ Store Audits needing action: "+actionNeeded);return L.join("\n");}
@@ -7241,7 +7258,8 @@ function piSave(){
   toast("🔧 Installation saved");renderPiList();
 }
 function renderPiList(){
-  var box=document.getElementById("pi_list");if(!box)return;var l=piLoad();
+  // POSM installations are per-rep records → Employee sees only own (Admin/HOD all).
+  var box=document.getElementById("pi_list");if(!box)return;var l=txnScopeMine(piLoad());
   if(!l.length){box.innerHTML='<div class="note" style="margin:0">No installations logged yet.</div>';return;}
   box.innerHTML=l.slice().reverse().map(function(r){var thumbs='';if(r.beforePhoto)thumbs+='<div style="flex:1"><div class="hint">Before</div><img src="'+r.beforePhoto+'" style="width:100%;border-radius:6px;border:1px solid #dfe6e2"></div>';if(r.afterPhoto)thumbs+='<div style="flex:1"><div class="hint">After</div><img src="'+r.afterPhoto+'" style="width:100%;border-radius:6px;border:1px solid #dfe6e2"></div>';return '<div style="border:1px solid #e6ece9;border-radius:10px;padding:9px 11px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-weight:700;font-size:12.5px">'+escapeHtml(r.posmItem||"")+'</div><button class="btn btn-ghost" style="flex:none;padding:2px 9px;font-size:12px" onclick="piDelete(\''+r.id+'\')">🗑️</button></div><div class="ac-sub">🏪 '+escapeHtml(r.storeName||"")+' · '+escapeHtml(r.city||"")+'</div><div class="ac-sub">📅 '+escapeHtml(r.installDate||"")+(r.installedBy?(' · 👷 '+escapeHtml(r.installedBy)):"")+(r.location?(' · 📍 '+escapeHtml(r.location)):"")+'</div>'+(r.fromDbName?('<div class="ac-sub">🚚 From: '+escapeHtml(r.fromDbName)+'</div>'):"")+(thumbs?('<div class="row2" style="margin-top:6px">'+thumbs+'</div>'):"")+(r.remarks?('<div class="ac-sub" style="margin-top:4px">📝 '+escapeHtml(r.remarks)+'</div>'):"")+'</div>';}).join("");
 }
@@ -7269,12 +7287,18 @@ function ffSubmit(){
   var lines=[],totUnits=0,totNsv=0;
   if(pend.mode==="order"){lines=pend.lines.map(function(o){var val=(o.value!=null&&o.value!=="")?num(o.value):num(o.units)*num(o.mrp);var nsv=val*0.6/100000;totUnits+=num(o.units);totNsv+=nsv;return {code:o.code,name:o.name,brand:o.brand,targetBrand:o.targetBrand,category:o.category,subCategory:o.subCategory,mrp:o.mrp,uom:o.uom,units:num(o.units),value:val,nsvLakh:+nsv.toFixed(4)};});}
   var s=pend.store||{};
-  var rec={id:pend.editId||("SO_"+Date.now()),code:pend.code,emp:pend.emp,date:pend.date,storeType:s.storeType||"",clientId:s.clientId||"",companyCode:s.companyCode||"",storeName:s.storeName||"",city:s.city||"",state:s.state||"",dbCode:s.dbCode||"",dbName:s.dbName||"",source:pend.source||"Store Visit",status:pend.status,cancelReason:pend.cancelReason||pend.reason||"",remarks:pend.remarks||"",lines:lines,totUnits:totUnits,totNsv:+totNsv.toFixed(4),photoStore:(pend.photos&&pend.photos.store)||"",photoDisplay:(pend.photos&&pend.photos.display)||"",ts:nowTime()};
   var l=soLoad();
+  // AUTO ORDER / PO NUMBER. This is the live save path (Field → Submit), so the PO is
+  // issued here — re-saving the SAME order (edit) keeps the PO it was first issued.
+  var _po="";
+  if(pend.editId){for(var pi=0;pi<l.length;pi++){if(l[pi].id===pend.editId){_po=l[pi].poNumber||"";break;}}}
+  if(!_po){try{_po=nextPoNumber(s.clientId||s.companyCode||s.code||"");}catch(e){_po="";}}
+  var rec={id:pend.editId||("SO_"+Date.now()),poNumber:_po,code:pend.code,emp:pend.emp,date:pend.date,storeType:s.storeType||"",clientId:s.clientId||"",companyCode:s.companyCode||"",storeName:s.storeName||"",city:s.city||"",state:s.state||"",dbCode:s.dbCode||"",dbName:s.dbName||"",source:pend.source||"Store Visit",status:pend.status,cancelReason:pend.cancelReason||pend.reason||"",remarks:pend.remarks||"",lines:lines,totUnits:totUnits,totNsv:+totNsv.toFixed(4),photoStore:(pend.photos&&pend.photos.store)||"",photoDisplay:(pend.photos&&pend.photos.display)||"",ts:nowTime()};
   if(pend.editId){var ix=-1;for(var i=0;i<l.length;i++){if(l[i].id===pend.editId){ix=i;break;}}if(ix>=0)l[ix]=rec;else l.push(rec);}
   else l.push(rec);
   soSave(l);
   var savedName=rec.storeName||"Store";
+  var poNote=rec.poNumber?('<div style="margin:8px 0 0;padding:7px 11px;background:#eff6ff;border:1px dashed #60a5fa;border-radius:8px;font-size:12.5px"><span style="color:#1e40af">🆔 <b>Order / PO #:</b> </span><b style="color:#1d3fb3;letter-spacing:.5px">'+escapeHtml(rec.poNumber)+'</b> <span class="hint" style="margin-left:6px">(auto)</span></div>'):"";
   _ffPending=null;_editSoId=null;_editPhotos=null;_editMeta=null;
   try{osResetOrder();}catch(e){}
   osShowPunchForm();
@@ -7290,13 +7314,13 @@ function ffSubmit(){
   var isTel=(rec.source==="Telephonic Call");
   if(isTel){
     window._lastPosmVisit=null;   // nothing to audit — clear the POSM visit context
-    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #7A5AF8"><div class="note" style="margin:0">📞 <b>'+escapeHtml(savedName)+'</b> — telephonic order saved. <span class="hint">Phone order hai, store visit nahi — POSM ki zaroorat nahi.</span></div>'
+    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #7A5AF8"><div class="note" style="margin:0">📞 <b>'+escapeHtml(savedName)+'</b> — telephonic order saved. <span class="hint">Phone order hai, store visit nahi — POSM ki zaroorat nahi.</span></div>'+poNote
       +'<div class="row2" style="margin-top:10px"><button class="btn btn-navy" onclick="posmNextStore()">➡️ Next Store</button><button class="btn btn-ghost" onclick="posmCloseDay()">🏁 Close Day (Final Submit)</button></div></div>';
   }else if(pend.mode==="order"&&!isCancel){
-    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">💾 <b>'+escapeHtml(savedName)+'</b> order saved. <span class="hint">Opening SEC Order tab — modify if needed, then Proceed to POSM.</span></div></div>';
+    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">💾 <b>'+escapeHtml(savedName)+'</b> order saved. <span class="hint">Opening SEC Order tab — modify if needed, then Proceed to POSM.</span></div>'+poNote+'</div>';
     var fb=document.querySelector('.nav button[data-v="fulfil"]');go("fulfil",fb);
   }else{
-    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">💾 <b>'+escapeHtml(savedName)+'</b> saved. <span class="hint">Opening POSM for this store…</span></div></div>';
+    if(out)out.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">💾 <b>'+escapeHtml(savedName)+'</b> saved. <span class="hint">Opening POSM for this store…</span></div>'+poNote+'</div>';
     posmStartFromVisit();
   }
 }
@@ -7393,7 +7417,7 @@ function dashFieldRows(R,ok){
   return out;
 }
 function dashOrders(R,ok){
-  var l=(typeof soLoad==="function")?soLoad():[]; var out=[];
+  var l=txnScopeMine((typeof soLoad==="function")?soLoad():[]); var out=[];
   l.forEach(function(r){ if(!r||!r.date)return; if(!dInRange(r.date,R))return; if(!ok(r.emp, r.state?dashEmpZone(r.emp):""))return; out.push(r); });
   return out;
 }
@@ -7984,6 +8008,7 @@ function applyEmployeeSelfRestrictionToDropdowns(){
   var singles={
     // format: id → fn(emp) that returns the option value/label to keep
     "f_emp":function(e){return e.code||e.name;},
+    "po_emp":function(e){return e.code||e.name;},   // POSM tab — must be self-locked too
     "pi_emp":function(e){return e.code||e.name;},
     "st_emp":function(e){return e.code||e.name;},
     "e_emp":function(e){return e.code||e.name;},
@@ -8541,7 +8566,8 @@ function _isOrderOpen(o){
   return !(s.indexOf("billing")>=0 || s.indexOf("delivered")>=0 || s.indexOf("cancel")>=0 || s.indexOf("no order")>=0);
 }
 function pendingOrdersList(){
-  try{return (soLoad()||[]).filter(_isOrderOpen);}catch(e){return [];}
+  // Employee → own pending orders only; Admin/HOD → everyone's.
+  try{return txnScopeMine(soLoad()).filter(_isOrderOpen);}catch(e){return [];}
 }
 function pendingOrdersCount(){return pendingOrdersList().length;}
 function refreshPendingBanners(){
@@ -8582,11 +8608,18 @@ function renderPendingOrdersCard(){
   list.sort(function(a,b){return String(a.date||"").localeCompare(String(b.date||""));});
   var days=function(d){if(!d)return "";var ago=Math.floor((Date.now()-new Date(d+"T00:00:00").getTime())/86400000);return ago<=0?"today":(ago===1?"1 day ago":(ago+" days ago"));};
   var opts=["Order in Process","Billing Done","No Order","Cancel Order"];
-  var h='<div class="tbl-scroll"><table style="font-size:11.5px"><thead><tr><th>Date</th><th>Store</th><th>Emp</th><th>Value</th><th>Age</th><th>Update Status</th></tr></thead><tbody>';
+  // Self-scope notice (Employee logins only see their own pending orders)
+  var h="";
+  try{
+    var _open=(soLoad()||[]).filter(_isOrderOpen).length,_hid=_open-list.length;
+    if(_hid>0)h+='<div class="hint" style="margin:0 0 8px;color:#1e40af;background:#eff6ff;border-left:3px solid #60a5fa;padding:6px 9px;border-radius:6px">🔒 Sirf <b>aapke</b> pending orders — '+_hid+' doosre employee ke record chhipaye gaye.</div>';
+  }catch(e){}
+  h+='<div class="tbl-scroll"><table style="font-size:11.5px"><thead><tr><th>PO #</th><th>Date</th><th>Store</th><th>Emp</th><th>Value</th><th>Age</th><th>Update Status</th></tr></thead><tbody>';
   list.forEach(function(o){
     var val=(o.lines||[]).reduce(function(a,l){return a+num(l.value);},0);
     var sop=opts.map(function(x){return '<option value="'+x+'"'+(x===o.status?" selected":"")+'>'+x+'</option>';}).join("");
     h+='<tr>'
+      +'<td style="color:#1d3fb3;font-weight:700;white-space:nowrap">'+escapeHtml(o.poNumber||"—")+'</td>'
       +'<td>'+ddmmyy(o.date)+'</td>'
       +'<td><b>'+escapeHtml(o.storeName||"—")+'</b><br><span class="ac-sub">'+escapeHtml(o.city||"")+'</span></td>'
       +'<td>'+escapeHtml(shortName(o.emp||o.code||""))+'</td>'
@@ -8661,6 +8694,34 @@ function dlFillEmpDropdown(){
   if(to&&!to._wired){to.addEventListener("change",dlUpdateSummary);to._wired=true;}
   dlUpdateSummary();
 }
+
+/* ═══════════ SELF-ONLY DATA SCOPING (SEC Order · POSM · trackers) ═══════════
+   An Employee login must NEVER see another salesman's transactional rows.
+   The backend pull already role-filters (Admin/HOD → all, Employee → own by
+   EmpCode), but a device can still hold FOREIGN rows locally:
+     • an Admin/HOD logged in earlier on the same browser (their pull downloads
+       everybody, and mergeTxnFromRemote keeps rows forever), or
+     • seeded/demo rows, or a shared test device.
+   So every list that reads the shared txn stores runs through txnScopeMine().
+   Rows with NO employee stamp at all are treated as MINE — we must never hide
+   a rep's own half-written record. Nothing is deleted here (non-destructive):
+   foreign rows just become invisible and un-pushable. */
+function txnRowIsMine(r,rs){
+  if(!r)return false;
+  var c=String(r.code||r.empCode||"").toUpperCase().trim();
+  var n=String(r.emp||r.empName||r.employee||"").toUpperCase().trim();
+  if(!c&&!n)return true;                       // unstamped → treat as own
+  if(rs.code&&(c===rs.code||n===rs.code))return true;
+  if(rs.name&&(n===rs.name||c===rs.name))return true;
+  return false;
+}
+function txnScopeMine(list){
+  list=list||[];
+  var rs=(typeof isEmployeeSelfOnly==="function")?isEmployeeSelfOnly():{on:false};
+  if(!rs.on)return list;                       // Admin/HOD → unrestricted
+  return list.filter(function(r){return txnRowIsMine(r,rs);});
+}
+window.txnScopeMine=txnScopeMine;
 
 // Detect if current session is a non-admin/non-HOD Employee who should see only own data
 function isEmployeeSelfOnly(){
@@ -9020,7 +9081,7 @@ function downloadBeatCoverageExcel(){
 /* ─── 4. ORDER STATUS AGING EXCEL ─── */
 function downloadOrderStatusExcel(){
   if(typeof XLSX==="undefined"){toast("Excel library not loaded");return;}
-  var orders=[];try{orders=soLoad()||[];}catch(e){orders=[];}
+  var orders=[];try{orders=txnScopeMine(soLoad());}catch(e){orders=[];}
   if(!orders.length){toast("Koi secondary order nahi hai");return;}
   var wb=XLSX.utils.book_new();
   var today=new Date();
@@ -11447,16 +11508,21 @@ function tadaFillClaimDesigDropdown(){
     var cutoff=purgeBeforeDate();if(cutoff&&cutoff>winStart)winStart=cutoff;
     function inWindow(r){var d=String(r.date||"");return !d||d>=winStart;}
     function todayOnly(r){return !today||String(r.date||"")===today;}
+    // SELF-ONLY PUSH: on an Employee device, push ONLY that employee's rows. The backend
+    // force-stamps EmpCode=caller on transactional writes, so pushing a foreign row that
+    // is sitting in this browser's localStorage would REBRAND that order under the wrong
+    // salesman on the sheet. Admin/HOD devices push everything (their mirror is legit).
+    function mine(arr){try{return window.txnScopeMine?window.txnScopeMine(arr):arr;}catch(e){return arr;}}
     var jobs=[];
-    var so=readKey("me_em_secorders_v1").filter(inWindow);
+    var so=mine(readKey("me_em_secorders_v1")).filter(inWindow);
     if(so.length)jobs.push(pushRows("SecOrders",so.map(function(r){return {
-      PoNumber:r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
+      PoNumber:r.poNumber||r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
       OrderSource:r.source||"Store Visit",StoreType:r.storeType,ClientId:r.clientId,
       CompanyCode:r.companyCode,StoreName:r.storeName,City:r.city,State:r.state,
       DbCode:r.dbCode,DbName:r.dbName,Status:r.status,CancelReason:r.cancelReason||"",
       Remarks:r.remarks||"",TotUnits:r.totUnits||0,TotNsv:r.totNsv||0,
       LinesJson:JSON.stringify(r.lines||[]),Ts:r.ts};}),"PoNumber"));
-    var sa=readKey("me_em_storeaudit_v1").filter(inWindow);
+    var sa=mine(readKey("me_em_storeaudit_v1")).filter(inWindow);
     if(sa.length)jobs.push(pushRows("POSM_Audit",sa.map(function(r){return {
       Id:r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
       PosmStatus:r.posmStatus||"Installed",StoreType:r.storeType,ClientId:r.clientId,
@@ -11466,13 +11532,13 @@ function tadaFillClaimDesigDropdown(){
       Visibility:r.visibility||"",Action:r.action||"",PhotoEvidence:r.photoEvidence||"",
       InstalledBy:r.installedBy||"",VerifiedBy:r.verifiedBy||"",VerifyDate:fmtDDMMYYYY(r.verifyDate),
       NextReview:fmtDDMMYYYY(r.nextReview),Remarks:r.remarks||"",Ts:r.ts};}),"Id"));
-    var rq=readKey("me_em_posmreq_v1").filter(inWindow);
+    var rq=mine(readKey("me_em_posmreq_v1")).filter(inWindow);
     if(rq.length)jobs.push(pushRows("POSM_Requirement",rq.map(function(r){return {
       Id:r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
       StoreType:r.storeType,ClientId:r.clientId,CompanyCode:r.companyCode,
       StoreName:r.storeName,City:r.city,State:r.state,
       Requirement:r.requirement,Remarks:r.remarks||"",Ts:r.ts};}),"Id"));
-    var ns=readKey("me_em_newstores_v1").filter(inWindow);
+    var ns=mine(readKey("me_em_newstores_v1")).filter(inWindow);
     if(ns.length)jobs.push(pushRows("NewStores",ns.map(function(r){return {
       StoreId:r.storeId||r.id,Date:fmtDDMMYYYY(r.date),EmpCode:r.code,EmpName:r.emp,
       DbCode:r.dbCode,DbName:r.dbName,StoreType:r.type,StoreName:r.storeName,State:r.state,
@@ -11511,7 +11577,9 @@ function tadaFillClaimDesigDropdown(){
       if(added){try{localStorage.setItem(localKey,JSON.stringify(local));}catch(e){}}
     }
     var byId=function(r){return r.id;};
-    mergeKey("me_em_secorders_v1",remote.SecOrders,"PoNumber",byId,function(r){return {id:r.PoNumber,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),source:r.OrderSource||"Store Visit",storeType:r.StoreType,clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,city:r.City,state:r.State,dbCode:r.DbCode,dbName:r.DbName,status:r.Status,cancelReason:r.CancelReason||"",remarks:r.Remarks||"",totUnits:+r.TotUnits||0,totNsv:+r.TotNsv||0,lines:(function(){try{return JSON.parse(r.LinesJson||"[]");}catch(e){return [];}})(),photoStore:"",photoDisplay:"",ts:r.Ts};});
+    // PoNumber column doubles as the row key. Legacy rows carry the internal id
+    // ("SO_<ts>") there — those have no real PO, so poNumber stays blank.
+    mergeKey("me_em_secorders_v1",remote.SecOrders,"PoNumber",byId,function(r){return {id:r.PoNumber,poNumber:(/^SO_/i.test(String(r.PoNumber||""))?"":String(r.PoNumber||"")),code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),source:r.OrderSource||"Store Visit",storeType:r.StoreType,clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,city:r.City,state:r.State,dbCode:r.DbCode,dbName:r.DbName,status:r.Status,cancelReason:r.CancelReason||"",remarks:r.Remarks||"",totUnits:+r.TotUnits||0,totNsv:+r.TotNsv||0,lines:(function(){try{return JSON.parse(r.LinesJson||"[]");}catch(e){return [];}})(),photoStore:"",photoDisplay:"",ts:r.Ts};});
     mergeKey("me_em_storeaudit_v1",remote.POSM_Audit,"Id",byId,function(r){return {id:r.Id,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),posmStatus:r.PosmStatus||"Installed",storeType:r.StoreType,clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,city:r.City,state:r.State,element:r.Element||"",posmType:r.PosmType||"",location:r.Location||"",brand:r.Brand||"",assetType:r.AssetType||"",period:r.Period||"",dominance:r.Dominance||"",condition:r.Condition||"",visibility:r.Visibility||"",action:r.Action||"",photoEvidence:r.PhotoEvidence||"",installedBy:r.InstalledBy||"",verifiedBy:r.VerifiedBy||"",verifyDate:pullDateToISO(r.VerifyDate),nextReview:pullDateToISO(r.NextReview),remarks:r.Remarks||"",ts:r.Ts};});
     mergeKey("me_em_posmreq_v1",remote.POSM_Requirement,"Id",byId,function(r){return {id:r.Id,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),storeType:r.StoreType,clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,city:r.City,state:r.State,requirement:r.Requirement,remarks:r.Remarks||"",photoA:"",photoB:"",ts:r.Ts};});
     mergeKey("me_em_newstores_v1",remote.NewStores,"StoreId",function(r){return r.storeId||r.id;},function(r){return {id:r.StoreId,storeId:r.StoreId,code:r.EmpCode,emp:r.EmpName,date:pullDateToISO(r.Date),dbCode:r.DbCode,dbName:r.DbName,type:r.StoreType,storeName:r.StoreName,state:r.State,town:r.Town,address:r.Address,pincode:r.Pincode,beat:r.Beat,category:r.Category,daySales:r.DaySales,monthlyTurnover:r.MonthlyTurnover,owner:r.OwnerName,ownerMob:r.OwnerMobile,reason:r.Reason,status:r.Status||"In-Process",statusReason:r.StatusReason||"",ts:r.Ts};});
