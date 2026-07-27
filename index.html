@@ -2252,8 +2252,8 @@ function uploadMaster(ev){
       var VS={"SEC TGT":1,"Phasing TGT":1,"MEGA/BA TGT":1};
       sheetRows(wb,"Phasing BA TGT").forEach(function(r){var st=Sv(r["Target Status"]);if(Sv(r.Code)&&VS[st])m.phasing.push({code:Sv(r.Code),status:st,month:Sv(r.Month),total:num(r["Total TGT"]),TDC:num(r.TDC),TDC_FW:num(r["TDC-FW"]),TDC_SERUM:num(r["TDC-SERUM"]),BB:num(r.BB),AQ:num(r.AQ),DRS:num(r.DRS),CC:num(r.CC)});});
       sheetRows(wb,"Products").forEach(function(r){var st=Sv(r["MSL Status"]);if(Sv(r["Product Code"])&&/^MSL$/i.test(st))m.msl.push({brand:Sv(r["Brand Short"])||Sv(r["Target Brand"]),pcode:Sv(r["Product Code"]),product:Sv(r["Product Name"])||Sv(r.Product),cat:Sv(r.Category),subcat:Sv(r["Sub Category"]),mrp:Sv(r.MRP)});});
-      sheetRows(wb,"Distributors").forEach(function(r){var c=Sv(r["Distributor Code"])||Sv(r.Code);if(c)m.distributors.push({code:c,name:Sv(r["Distributor Name"])||Sv(r.Name)});});
-      sheetRows(wb,"Stores").forEach(function(r){var cid=Sv(r["Client ID"])||Sv(r.ClientId),sn=Sv(r["Store Name"])||Sv(r.StoreName);if(cid||sn)m.stores.push({clientId:cid,companyCode:Sv(r["Actual Company Code"])||Sv(r["Company Code"])||Sv(r.CompanyCode),storeName:sn,city:Sv(r["City Name"])||Sv(r.City),state:Sv(r["State Name"])||Sv(r.State),status:Sv(r.Status),dbCode:Sv(r["Distributor Code"])||Sv(r.DbCode),dbName:Sv(r["Distributor Name"])||Sv(r.DbName),storeType:Sv(r["Store Type"])||Sv(r.StoreType),emAsm:Sv(r["EM ASM NAME"])||Sv(r.EmAsm),emAsmHq:Sv(r["EM ASM HQ"])||Sv(r.EmAsmHq)});});
+      sheetRows(wb,"Distributors").forEach(function(r){var c=Sv(r["Distributor Code"])||Sv(r.Code);if(c)m.distributors.push({code:c,name:Sv(r["Distributor Name"])||Sv(r.Name),city:Sv(r["City Name"])||Sv(r.City),metroCity:Sv(r["Metro City"])||Sv(r.MetroCity),zone:Sv(r.Zone),region:Sv(r.Region),asmName:Sv(r["ASM Name"])||Sv(r.AsmName),asmHq:Sv(r["ASM HQ"])||Sv(r.AsmHq),emAsm:Sv(r["EM ASM"])||Sv(r["EM ASM NAME"])||Sv(r.EmAsm),emAsmHq:Sv(r["EM ASM HQ"])||Sv(r.EmAsmHq)});});
+      sheetRows(wb,"Stores").forEach(function(r){var cid=Sv(r["Client ID"])||Sv(r.ClientId),sn=Sv(r["Store Name"])||Sv(r.StoreName);if(cid||sn)m.stores.push({clientId:cid,companyCode:Sv(r["Actual Company Code"])||Sv(r["Company Code"])||Sv(r.CompanyCode),storeName:sn,city:Sv(r["City Name"])||Sv(r.City),state:Sv(r["State Name"])||Sv(r.State),status:Sv(r.Status),dbCode:Sv(r["Distributor Code"])||Sv(r.DbCode),dbName:Sv(r["Distributor Name"])||Sv(r.DbName),storeType:Sv(r["Store Type"])||Sv(r.StoreType),emAsm:Sv(r["EM ASM NAME"])||Sv(r.EmAsm),emAsmHq:Sv(r["EM ASM HQ"])||Sv(r.EmAsmHq),enrollDate:Sv(r["Enroll Date"])||Sv(r.EnrollDate),zone:Sv(r.Zone),region:Sv(r.Region),asmName:Sv(r["ASM Name"])||Sv(r["ASM NAME"])||Sv(r.AsmName),asmHq:Sv(r["ASM HQ"])||Sv(r.AsmHq)});});
       sheetRows(wb,"Products").forEach(function(r){var pc=Sv(r["Product Code"]),pn=Sv(r["Product Name"])||Sv(r.Product);if(pc||pn)m.products.push({targetBrand:Sv(r["Target Brand"]),code:pc,name:pn,brand:Sv(r["Brand Name"])||Sv(r.Brand),brandShort:Sv(r["Brand Short"]),category:Sv(r.Category),subCategory:Sv(r["Sub Category"]),range:Sv(r.Range),uom:Sv(r.UOM)||Sv(r.UMO),mrp:Sv(r.MRP),mslStatus:Sv(r["MSL Status"]),lifecycle:Sv(r.Lifecycle)});});
       if(!m.employees.length){if(_mstat){_mstat.textContent="\u26a0\ufe0f No Employees rows found \u2014 check the 'Employees' sheet & headers.";_mstat.style.color="#b91c1c";}toast("No Employees rows found");return;}
       saveMaster(m);applyMaster();fillEmpSelects();planRefresh();
@@ -2446,6 +2446,16 @@ function planSubmitDeviation(){
   else if(ww==="Meeting / Activity"){actual=ww+(elv("p_ww_acttype")?(" — "+elv("p_ww_acttype")):"");}
   else if(ww==="Leave"||ww==="Sick Leave"){actual=ww+(elv("p_ww_leave_reason")?(" — "+elv("p_ww_leave_reason")):"");}
   var arr=(typeof devLoad==="function")?devLoad():[];var id=code+"__"+date;var ex=null;for(var i=0;i<arr.length;i++){if(arr[i].id===id){ex=arr[i];break;}}
+  // DUPLICATE GUARD: one pending request per day. Re-taps must not resend to HOD.
+  if(ex&&/^pending$/i.test(String(ex.status||""))){
+    toast("⏳ Approval request already sent — HOD approval ka wait karo. Dobara bhejne ki zaroorat nahi.");
+    var ss0=document.getElementById("p_send_stage");if(ss0)ss0.style.display="";
+    return false;
+  }
+  if(ex&&/^approved$/i.test(String(ex.status||""))){
+    toast("✅ Aaj ka change already APPROVED hai — naya request nahi bheja.");
+    return false;
+  }
   var now=Date.now();
   var rec=ex||{id:id,code:code,date:date};
   rec.emp=elv("p_emp_name")||"";rec.plannedWw=planned;rec.actualWw=actual;
@@ -3649,7 +3659,7 @@ function pjpSubmit(){
   if(!dr){toast("Employee + month select karein");return;}
   var dayCount=dr.days?Object.keys(dr.days).length:0;
   if(!dayCount){toast("Pehle month ke din plan karo");return;}
-  if(!pjpEditable(dr)){toast("Already submitted / approved");return;}
+  if(!pjpEditable(dr)){toast("⏳ Approval request already sent — HOD approval ka wait karo. Dobara submit nahi hoga.");return;}
   if(!pjpWindowOpen(dr.month,dr)){toast("⛔ Submission window band (27–1 hi allowed). HOD se window khulwao.");return;}
   dr.status="Pending";dr.submittedAt=nowTime();dr.sentToHod=true;dr.rejectedDays=[];dr.rejectReason="";dr.updatedAt=Date.now();
   savePjpDraft(dr);
@@ -4248,8 +4258,8 @@ var MASTER_TEMPLATE_SHEETS={
   "PJP":["Code","Zone","Date","Week Days","Town/City","Beat/Market","Focus Brand"],
   "Phasing BA TGT":["Code","Target Status","Month","Total TGT","TDC","TDC-FW","TDC-SERUM","BB","AQ","DRS","CC"],
   "Products":["Target Brand","Product Code","Product Name","Brand Name","Brand Short","Category","Sub Category","Range","UOM","MRP","MSL Status","Lifecycle"],
-  "Distributors":["Distributor Code","Distributor Name"],
-  "Stores":["Client ID","Actual Company Code","Store Name","City Name","State Name","Status","Distributor Code","Distributor Name","Store Type","EM ASM NAME","EM ASM HQ"]
+  "Distributors":["Distributor Code","Distributor Name","City Name","Metro City","Zone","Region","ASM Name","ASM HQ","EM ASM","EM ASM HQ"],
+  "Stores":["Client ID","Actual Company Code","Store Name","City Name","State Name","Status","Distributor Code","Distributor Name","Store Type","EM ASM NAME","EM ASM HQ","Enroll Date","Zone","Region","ASM Name","ASM HQ"]
 };
 var PJP_TEMPLATE_HEADERS=["Code","Employee Name","Date","Working With","Town/City","Beat/Market","Focus Brand"];
 
@@ -8380,7 +8390,11 @@ function apprLogActor(){try{var s=JSON.parse(localStorage.getItem("me_em_session
 function logApprovalEvent(ev){
   try{
     var a=apprLogActor();
-    var row={Id:"AL_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),Ts:(typeof nowTime==="function")?nowTime():new Date().toISOString(),
+    // DETERMINISTIC Id (kind+action+emp+date/month): re-fires of the same event UPSERT the
+    // same row instead of appending — kills the duplicate Approval_Log entries.
+    var slug=function(s){return String(s||"").replace(/[^\w]+/g,"").slice(0,24);};
+    var id="AL_"+slug(ev.kind)+"_"+slug(ev.action)+"_"+slug(ev.empCode)+"_"+slug(ev.refDate||ev.month||"");
+    var row={Id:id,Ts:(typeof nowTime==="function")?nowTime():new Date().toISOString(),
       Kind:ev.kind||"",Action:ev.action||"",Actor:a.name,ActorRole:a.role,
       EmpCode:ev.empCode||"",EmpName:ev.empName||"",RefDate:ev.refDate?ddmmyy(ev.refDate):"",Month:ev.month||"",
       Details:ev.details||"",Reason:ev.reason||""};
@@ -11339,11 +11353,11 @@ function tadaFillClaimDesigDropdown(){
     }
     // Stores
     if(remote.Master_Stores&&remote.Master_Stores.length){
-      m.stores=remote.Master_Stores.map(function(r){return {clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,storeType:r.StoreType,city:r.City,state:r.State,status:r.Status||"",dbCode:r.DbCode,dbName:r.DbName,emAsm:r.EmAsm||"",emAsmHq:r.EmAsmHq||""};});
+      m.stores=remote.Master_Stores.map(function(r){return {clientId:r.ClientId,companyCode:r.CompanyCode,storeName:r.StoreName,storeType:r.StoreType,city:r.City,state:r.State,status:r.Status||"",dbCode:r.DbCode,dbName:r.DbName,emAsm:r.EmAsm||"",emAsmHq:r.EmAsmHq||"",enrollDate:pullDateToISO(r.EnrollDate||""),zone:r.Zone||"",region:r.Region||"",asmName:r.AsmName||"",asmHq:r.AsmHq||""};});
     }
     // Distributors
     if(remote.Master_Distributors&&remote.Master_Distributors.length){
-      m.distributors=remote.Master_Distributors.map(function(r){return {code:r.Code,name:r.Name,city:r.City,state:r.State};});
+      m.distributors=remote.Master_Distributors.map(function(r){return {code:r.Code,name:r.Name,city:r.City||"",metroCity:r.MetroCity||"",zone:r.Zone||"",region:r.Region||"",asmName:r.AsmName||"",asmHq:r.AsmHq||"",emAsm:r.EmAsm||"",emAsmHq:r.EmAsmHq||"",state:r.State};});
     }
     // PJP (daily beat plan) — CRITICAL: without this, employees see blank PJP tab
     if(remote.Master_PJP&&remote.Master_PJP.length){
@@ -11413,6 +11427,19 @@ function tadaFillClaimDesigDropdown(){
       Town:r.town,Address:r.address,Pincode:r.pincode,Beat:r.beat,Category:r.category,
       DaySales:r.daySales,MonthlyTurnover:r.monthlyTurnover,OwnerName:r.owner,OwnerMobile:r.ownerMob,
       Reason:r.reason,Status:r.status||"In-Process",StatusReason:r.statusReason||"",Ts:r.ts};}),"StoreId"));
+    // DFR — one merged, time-ordered timeline row per employee per day (was never pushed before)
+    if(so.length||ns.length||sa.length||rq.length){
+      var epoch=function(id){var m=String(id||"").match(/_(\d+)/);return m?+m[1]:0;};
+      var acts=[];
+      so.forEach(function(r){acts.push({k:epoch(r.id),ts:r.ts||"",type:"Sec Order",store:r.storeName||"",detail:(r.status==="No Order"||!(r.lines&&r.lines.length))?("No Order"+(r.cancelReason?(" — "+r.cancelReason):"")):((r.totUnits||0)+"u · ₹"+(r.totNsv||0)+"L · "+(r.status||""))});});
+      ns.forEach(function(r){acts.push({k:epoch(r.id),ts:r.ts||"",type:"New Store",store:r.storeName||"",detail:"New outlet — "+(r.category||"")});});
+      sa.forEach(function(r){acts.push({k:epoch(r.id),ts:r.ts||"",type:"POSM Audit",store:r.storeName||"",detail:r.element||""});});
+      rq.forEach(function(r){acts.push({k:epoch(r.id),ts:r.ts||"",type:"POSM Req",store:r.storeName||"",detail:"Required: "+(r.requirement||"")});});
+      acts.sort(function(a,b){return a.k-b.k;});
+      var s0=(so[0]||ns[0]||sa[0]||rq[0])||{};
+      jobs.push(pushRows("DFR",[{Id:(s0.code||"")+"_"+today,Date:fmtDDMMYYYY(today),EmpCode:s0.code||"",EmpName:s0.emp||"",
+        VisitJson:JSON.stringify(acts.map(function(a){return {ts:a.ts,type:a.type,store:a.store,detail:a.detail};})),Ts:(typeof nowTime==="function")?nowTime():""}],"Id"));
+    }
     setTimeout(function(){try{if(window.__syncPhotosNow)window.__syncPhotosNow();}catch(e){}},600);
     return Promise.all(jobs).then(function(){setStatus("synced","☁️ Store synced · "+timeShort());return {ok:true};}).catch(function(e){return {ok:false,error:String(e)};});
   }
@@ -11475,6 +11502,9 @@ function tadaFillClaimDesigDropdown(){
   function pullAll(){
     var email=currentUserEmail();
     if(!email){setStatus("idle","☁️ Login to sync");return Promise.resolve({ok:false,error:"no email"});}
+    // Retry anything stuck in the offline queue on every sync cycle (was boot-only,
+    // so failed txn pushes could sit queued for the whole day).
+    try{drainQueue();}catch(_dq){}
     setStatus("syncing","📡 Syncing…");
     return httpGet({action:"pull",email:email}).then(function(res){
       if(!res||!res.ok){setStatus("offline","⚠️ Sync failed");return res;}
@@ -11518,7 +11548,8 @@ function tadaFillClaimDesigDropdown(){
     if(!email)return Promise.resolve({ok:false,error:"no email"});
     var payload={action:"push",email:email,sheet:sheet,rows:rows,upsertKey:upsertKey||null};
     return httpPost(payload).then(function(res){
-      if(!res||!res.ok){enqueue(payload);setStatus("offline","⚠️ Queued");}
+      // Surface the backend's error so failures are debuggable (was a blind "Queued")
+      if(!res||!res.ok){enqueue(payload);setStatus("offline","⚠️ "+sheet+": "+String((res&&res.error)||"queued").slice(0,60));}
       return res;
     }).catch(function(err){
       enqueue(payload);setStatus("offline","⚠️ Queued ("+loadQueue().length+")");
@@ -11724,18 +11755,21 @@ function tadaFillClaimDesigDropdown(){
           };});
           jobs.push(replaceSheetRemote("Master_Products",pRows));
         }
-        // Stores — include Status, EmAsm hierarchy
+        // Stores — include Status, EmAsm hierarchy + EnrollDate/Zone/Region/ASM
         if(m.stores&&m.stores.length){
           var sRows=m.stores.map(function(x){return {
             StoreType:x.storeType||"",ClientId:x.clientId||"",CompanyCode:x.companyCode||"",
             StoreName:x.storeName||"",City:x.city||"",State:x.state||"",Status:x.status||"",
-            DbCode:x.dbCode||"",DbName:x.dbName||"",EmAsm:x.emAsm||"",EmAsmHq:x.emAsmHq||""
+            DbCode:x.dbCode||"",DbName:x.dbName||"",EmAsm:x.emAsm||"",EmAsmHq:x.emAsmHq||"",
+            EnrollDate:x.enrollDate||"",Zone:x.zone||"",Region:x.region||"",AsmName:x.asmName||"",AsmHq:x.asmHq||""
           };});
           jobs.push(replaceSheetRemote("Master_Stores",sRows));
         }
-        // Distributors
+        // Distributors — include City/MetroCity/Zone/Region + ASM & EM-ASM mapping
         if(m.distributors&&m.distributors.length){
-          var dRows=m.distributors.map(function(d){return {Code:d.code,Name:d.name};});
+          var dRows=m.distributors.map(function(d){return {Code:d.code,Name:d.name,
+            City:d.city||"",MetroCity:d.metroCity||"",Zone:d.zone||"",Region:d.region||"",
+            AsmName:d.asmName||"",AsmHq:d.asmHq||"",EmAsm:d.emAsm||"",EmAsmHq:d.emAsmHq||""};});
           jobs.push(replaceSheetRemote("Master_Distributors",dRows));
         }
         // PJP (daily beat plan) — enriched with plan-change / approval tracking columns
