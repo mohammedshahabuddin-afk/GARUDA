@@ -2247,6 +2247,10 @@ function go(v,el){
   // each task upserts its own single row, so switching tabs never duplicates anything.
   try{if(typeof autoFlushAll==="function")autoFlushAll("nav");}catch(e){}
   try{if(typeof autoFlushLocalDrafts==="function")autoFlushLocalDrafts();}catch(e){}
+  // Opening a master-driven tab → make sure we are looking at the sheet's current master.
+  if(v==="field"||v==="plan"||v==="pjp"||v==="stock"||v==="data"){
+    try{if(typeof masterAutoRefresh==="function")masterAutoRefresh("nav:"+v);}catch(e){}
+  }
   if(typeof navAllowed==="function"&&!navAllowed(v)){
     var m=(typeof navLockMsg==="function")?navLockMsg(v):"🔒 Locked";
     if(typeof toast==="function")toast(m);
@@ -2936,7 +2940,7 @@ function saveEod(){
   r.eodTime=nowTime();r.eodDone=true;r.eodLocked=true;
   db[id]=r;save(db);
   // Close/lock the day (locks all order edits via ffIsFinal) \u2014 only when saving today.
-  try{if(date===todayISO())localStorage.setItem("me_em_so_final_v1",todayISO());}catch(_e){}
+  try{if(date===todayISO()){localStorage.setItem("me_em_so_final_v1",todayISO());ffMarkDayLock("eod");}}catch(_e){}
   // Push everything to the sheet: the day's store data + the EOD record itself.
   try{if(window.__sync&&window.__sync.pushTxnNow)window.__sync.pushTxnNow();}catch(_e){}
   /* The EOD row goes out through the autosave flush — the SINGLE writer for a day record.
@@ -3148,6 +3152,8 @@ var camStream=null,camTarget=null,nsPhotos={front:"",inside:""};
 function fieldRefresh(){
   var el=document.getElementById("field-date-lbl");var date=elv("f_date");
   if(el)el.textContent=date?ddmmyy(date):"";
+  // If today is locked, say so at the top of the Field tab with a way out (see ffDayLockInfo).
+  try{ffRenderLockBanner();}catch(e){}
   // Recover a punch that was interrupted (tab switch / refresh / disconnect). Only fires when
   // the form is empty, so it can never overwrite what the rep is typing right now.
   try{ffPunchRestoreDraft();}catch(e){}
@@ -5127,6 +5133,68 @@ function capturePhoto(){
   closeCam();
 }
 function ffIsFinal(){try{return localStorage.getItem("me_em_so_final_v1")===todayISO();}catch(e){return false;}}
+/* ═══════════ DAY LOCK — why it locked, and how to get out ═══════════
+   me_em_so_final_v1 = today locks the whole store loop (Field punch, SEC edits, POSM bar).
+   It is set by "Close Day (Final Submit)" AND automatically by saving EOD. Until now there was
+   NO way to undo it, so a rep who saved EOD early — or tapped Close Day by mistake — was stuck
+   for the rest of the day with only a bare "Day finalized — locked" toast and no explanation.
+   ffMarkDayLock records when/why, ffDayLockInfo reads it, ffReopenDay releases it. */
+function ffMarkDayLock(src){
+  try{localStorage.setItem("me_em_so_final_meta_v1",JSON.stringify({date:todayISO(),at:nowTime(),src:src||""}));}catch(e){}
+}
+function ffDayLockInfo(){
+  var out={locked:ffIsFinal(),at:"",src:""};
+  try{
+    var m=JSON.parse(localStorage.getItem("me_em_so_final_meta_v1")||"null");
+    if(m&&m.date===todayISO()){out.at=m.at||"";out.src=m.src||"";}
+  }catch(e){}
+  return out;
+}
+/* Release today's lock so the rep can keep working. The EOD record is kept but un-locked, so the
+   day's figures get recomputed when they save EOD again after adding the remaining stores. */
+function ffReopenDay(){
+  var info=ffDayLockInfo();
+  if(!info.locked){toast("Day already open hai");return;}
+  var why=(info.src==="eod")?"EOD save karne se":(info.src==="closeday"?"Close Day dabane se":"");
+  if(typeof confirm!=="undefined"&&!confirm("Aaj ka din "+(why?why+" ":"")+"lock hua tha"+(info.at?(" ("+info.at+")"):"")+".\n\nDobara kholein? Aap aage stores punch kar sakte ho.\nNOTE: baaki stores add karne ke baad EOD dobara Save karna hoga (figures recalculate honge)."))return;
+  try{localStorage.removeItem("me_em_so_final_v1");}catch(e){}
+  try{localStorage.removeItem("me_em_so_final_meta_v1");}catch(e){}
+  // un-lock today's day record so EOD can be saved again
+  try{
+    var db=load(),t=todayISO(),ch=false;
+    Object.keys(db).forEach(function(k){
+      var r=db[k];
+      if(r&&r.date===t&&r.eodLocked){r.eodLocked=false;ch=true;}
+    });
+    if(ch)save(db);
+  }catch(e){}
+  try{renderFfCurrent();}catch(e){}
+  try{renderFfList();}catch(e){}
+  try{fieldRefresh();}catch(e){}
+  try{if(typeof posmInit==="function")posmInit();}catch(e){}
+  try{updateNavLocks();}catch(e){}
+  toast("🔓 Din dobara khul gaya — aage kaam kar sakte ho");
+}
+/* Banner at the top of the Field tab: says exactly why the day is locked + the reopen button.
+   Built in JS so no markup anchor is needed. */
+function ffRenderLockBanner(){
+  var view=document.getElementById("v-field");if(!view)return;
+  var el=document.getElementById("field_lock_banner");
+  var info=ffDayLockInfo();
+  if(!info.locked){if(el)el.style.display="none";return;}
+  if(!el){
+    el=document.createElement("div");el.id="field_lock_banner";
+    view.insertBefore(el,view.firstChild);
+  }
+  var why=(info.src==="eod")?"aaj ka <b>EOD save</b> ho gaya tha":(info.src==="closeday"?"<b>Close Day (Final Submit)</b> dabaya gaya tha":"din <b>final submit</b> ho chuka tha");
+  el.style.display="";
+  el.className="card";
+  el.style.cssText="border-left:4px solid #b06a00;background:#fffaf0;margin-bottom:10px";
+  el.innerHTML='<h2 style="color:#7a5210"><span class="dot" style="background:#b06a00"></span>🔒 Aaj ka din lock hai</h2>'
+    +'<div class="note" style="margin:0 0 10px;color:#5a4008">'+why+(info.at?(' ('+escapeHtml(info.at)+')'):'')
+    +' — isliye naya order / POSM save nahi ho raha.<br><span class="hint">Agar aur stores karne hain to din dobara khol lo. Baad me EOD phir se Save karna hoga.</span></div>'
+    +'<button class="btn btn-navy" onclick="ffReopenDay()">🔓 Aaj ka din dobara kholo</button>';
+}
 function osMode(mode,el){
   var seg=document.getElementById("os_mode_seg");if(seg)seg.querySelectorAll(".seg-btn").forEach(function(b){b.classList.remove("on");});if(el)el.classList.add("on");
   var pw=document.getElementById("os_punch_wrap"),nw=document.getElementById("os_noorder_wrap");
@@ -5322,7 +5390,7 @@ function ffCloseDay(){
   if(!soLoad().length){toast("Koi visit nahi");return;}
   if(_ffPending){toast("Pehle current order Submit ya Field se hatao");return;}
   if(typeof confirm!=="undefined"&&!confirm("Poore din ka kaam FINAL SUBMIT karein?\nIske baad koi edit nahi hoga."))return;
-  try{localStorage.setItem("me_em_so_final_v1",todayISO());}catch(e){}
+  try{localStorage.setItem("me_em_so_final_v1",todayISO());ffMarkDayLock("closeday");}catch(e){}
   toast("\ud83c\udfc1 Day finalized \u2014 locked");
   renderFfCurrent();renderFfList();
   var out=document.getElementById("ff_out");if(out)out.innerHTML=msgActions(buildDayMsg(),"Send day report to HOD/manager",false);
@@ -5437,7 +5505,7 @@ function capturePhoto(){
 }
 function renderFfCurrent(){
   var box=document.getElementById("ff_current");if(!box)return;
-  if(ffIsFinal()){box.innerHTML='<div class="card" style="border-left:4px solid #2f9e57"><div class="note" style="margin:0">\u2705 <b>Day finalized</b> \u2014 sab orders lock. Naye din fresh start.</div></div>';return;}
+  if(ffIsFinal()){var _li=ffDayLockInfo();box.innerHTML='<div class="card" style="border-left:4px solid #b06a00;background:#fffaf0"><div class="note" style="margin:0 0 10px;color:#5a4008">\u2705 <b>Day finalized</b> \u2014 sab orders lock'+(_li.at?(' ('+escapeHtml(_li.at)+')'):'')+'. Naye din fresh start.<br><span class="hint">Aaj hi aur stores karne hain? Din dobara khol lo \u2014 baad me EOD phir Save karna hoga.</span></div><button class="btn btn-ghost small" onclick="ffReopenDay()">\ud83d\udd13 Aaj ka din dobara kholo</button></div>';return;}
   var l=txnScopeMine(soLoad());var tot=l.reduce(function(a,r){return a+(r.totNsv||0);},0);
   var h='<div class="card" style="border-left:4px solid #C8A24B"><div class="note" style="margin:0">\ud83d\udccd Order <b>Field tab</b> me punch hota hai. Yahaan aaj ke order <b>modify</b> (units/value/status/cancel), <b>Save</b> aur <b>POSM</b> par jao.'+(l.length?(' \u2014 abhi tak <b>'+l.length+'</b> visits \u00b7 NSV \u20b9'+tot.toFixed(4)+' L'):'')+'</div>';
   h+='<div class="row2" style="margin-top:10px"><button class="btn btn-ghost" onclick="ffSaveLocal()">\ud83d\udcbe Save</button><button class="btn btn-navy" onclick="ffProceedToPosm()">Proceed to POSM \u2192</button></div>';
@@ -9348,7 +9416,11 @@ function autoInstallTriggers(){
   if(window._autoWired)return;window._autoWired=true;
   // leaving the page / switching apps / reload / close
   try{
-    window.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden")autoFlushAll("hide");});
+    window.addEventListener("visibilitychange",function(){
+      if(document.visibilityState==="hidden")autoFlushAll("hide");
+      // Back in the foreground → re-read the master so sheet edits show up immediately.
+      else{try{if(typeof masterAutoRefresh==="function")masterAutoRefresh("foreground");}catch(e){}}
+    });
     window.addEventListener("pagehide",function(){autoFlushAll("pagehide");});
     window.addEventListener("beforeunload",function(){autoFlushAll("unload");});
   }catch(e){}
@@ -9398,6 +9470,11 @@ function renderMasterSource(){
         +'<br><span class="hint">Pakka fix: master Excel ko app ke Data tab se dobara upload karo (wo header-wise likhta hai), ya sheet ka header row data ke order me kar do.</span></div>';
     }
     if(al&&al.stores)h+='<div style="margin-top:4px">🗺️ '+al.mappedStores+' / '+al.stores+' stores kisi real salesman se mapped hain (EmAsm)</div>';
+    // A master tab returned 0 rows → the app is showing the last good copy, not the sheet
+    var es=(cache&&cache._emptySections)||[];
+    if(es.length)h+='<div style="margin-top:5px;color:#8a3520;background:#fff5f3;border-left:3px solid #b4432f;padding:6px 9px;border-radius:6px">'
+      +'⚠️ Sheet se <b>'+es.join(", ")+'</b> me 0 rows aaye — app purana (last good) data dikha raha hai. '
+      +'<span class="hint">Sheet ka wo tab khaali hai ya pull fail hua.</span></div>';
     // Duplicate PJP rows in the sheet (same employee+date more than once)
     var dup=cache&&cache._pjpDupes;
     if(dup)h+='<div style="margin-top:5px;color:#92400e;background:#fffbeb;border-left:3px solid #d97706;padding:6px 9px;border-radius:6px">'
@@ -9416,6 +9493,27 @@ function renderMasterSource(){
   }catch(e){}
   h+='</div>';
   box.innerHTML=h;
+}
+/* ═══════════ KEEP THE APP ON THE SHEET'S MASTER ═══════════
+   The app must always show what the Master_* tabs say. The 5-minute background poll is skipped
+   while the tab is hidden, so a rep who edits the sheet and switches straight back to the app
+   could look at data up to 5 minutes old. masterAutoRefresh() closes that window: it pulls when
+   the app comes to the foreground and when a master-driven tab is opened, provided the last sync
+   is older than 2 minutes (and never more than once a minute, so it cannot storm the backend). */
+var _masterRefreshAt=0;
+function masterLastSyncMs(){
+  try{var v=(window.__sync&&window.__sync.lastSync)?window.__sync.lastSync():null;if(!v)return 0;var t=new Date(v).getTime();return isNaN(t)?0:t;}catch(e){return 0;}
+}
+function masterAutoRefresh(reason){
+  try{
+    if(!(window.__sync&&window.__sync.pullNow&&window.__sync.isEnabled&&window.__sync.isEnabled()))return;
+    if(typeof navigator!=="undefined"&&navigator.onLine===false)return;
+    var now=Date.now();
+    if(now-_masterRefreshAt<60000)return;                 // at most once a minute
+    if(now-masterLastSyncMs()<120000)return;              // already fresh
+    _masterRefreshAt=now;
+    window.__sync.pullNow();
+  }catch(e){}
 }
 /* Force a fresh masters pull (Stores + Distributors first, then the full master set). */
 function masterRefreshFromSheet(){
@@ -12536,6 +12634,16 @@ function tadaFillClaimDesigDropdown(){
     _mark("distributors",remote.Master_Distributors);_mark("pjp",remote.Master_PJP);
     _mark("phasing",remote.Master_Phasing);
     m._syncedAt=new Date().toISOString();
+    /* A section is only replaced when the sheet returns rows for it — otherwise a failed or
+       empty read would wipe working data. The flip side is that an EMPTY master tab silently
+       leaves stale data on screen, so record it and show it in the Data tab instead of lying. */
+    m._emptySections=[];
+    [["stores",remote.Master_Stores],["distributors",remote.Master_Distributors],
+     ["products",remote.Master_Products],["employees",remote.Master_Employees],
+     ["pjp",remote.Master_PJP]].forEach(function(pair){
+      var have=(m[pair[0]]||[]).length;
+      if(have&&(!pair[1]||!pair[1].length))m._emptySections.push(pair[0]);
+    });
     // Config: array of {Key,Value} → object
     if(remote.Master_Config&&remote.Master_Config.length){
       remote.Master_Config.forEach(function(kv){if(kv.Key)m.config[kv.Key]=kv.Value;});
