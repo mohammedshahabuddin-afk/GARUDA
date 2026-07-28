@@ -2235,6 +2235,8 @@ document.addEventListener('DOMContentLoaded',function(){
   }
   // Autosave: page-hide / reload / close flush + 60s heartbeat (see AUTOSAVE ENGINE)
   try{if(typeof autoInstallTriggers==="function")autoInstallTriggers();}catch(e){}
+  // Collapse any PJP draft that got split across "2026-08" / "2026-08-01" keys
+  try{if(typeof pjpCollapseDraftKeys==="function")pjpCollapseDraftKeys();}catch(e){}
 });
 // The app markup is injected by React, so DOMContentLoaded may already have fired.
 if(document.readyState!=="loading"){try{if(typeof autoInstallTriggers==="function")autoInstallTriggers();}catch(e){}}
@@ -2937,7 +2939,11 @@ function saveEod(){
   try{if(date===todayISO())localStorage.setItem("me_em_so_final_v1",todayISO());}catch(_e){}
   // Push everything to the sheet: the day's store data + the EOD record itself.
   try{if(window.__sync&&window.__sync.pushTxnNow)window.__sync.pushTxnNow();}catch(_e){}
-  try{if(window.__sync&&window.__sync.push)window.__sync.push("EOD",[{Id:(r.code||"")+"_"+date,Date:ddmmyy(date),EmpCode:r.code||"",EmpName:name,EodJson:JSON.stringify(r),Ts:r.eodTime}],"Id");}catch(_e){}
+  /* The EOD row goes out through the autosave flush — the SINGLE writer for a day record.
+     Pushing here as well raced the autosave: the backend loads existing rows once per request,
+     so two in-flight pushes of the same Id both found "no match" and both appended, which is how
+     HCPL2586_2026-07-28 ended up in the sheet twice. */
+  try{autoTouchDay(r.code||"",date);if(typeof autoFlushAll==="function")autoFlushAll("eod");}catch(_e){}
   toast("\ud83c\udf19 EOD saved \u2014 din CLOSE \u2713");
   renderEodDaySummary();
   eodRenderShareBottom();
@@ -3355,9 +3361,35 @@ function _dbsFromStores(stores){
 }
 // Distributors mapped to the salesman = DISTINCT distributors of their EM-ASM-mapped stores.
 // Fallbacks (so the dropdown is NEVER empty): Distributors master → distributors of all stores.
+/* Which distributors a salesman may pick.
+   SOURCE OF TRUTH = Master_Distributors, scoped by its own EmAsm column. That column lists
+   EVERY distributor assigned to the rep — including ones he has no store mapped to yet, which
+   the old "distributors of my mapped stores" derivation silently dropped (a rep with 6 in the
+   master was offered only 4). If the master names any, that IS the list — nothing is merged in
+   from elsewhere. (A store whose DbCode points at a distributor not assigned to the rep is a
+   master inconsistency to fix in the sheet, not something to paper over here.) */
 function empDbList(){
-  var mapped=_dbsFromStores(empMappedStores());
-  if(mapped.length)return mapped;
+  var who=(typeof _dbNorm==="function")?_dbNorm(elv("f_emp")):String(elv("f_emp")||"").toUpperCase().trim();
+  var code="";try{code=String(empCodeOf(elv("f_emp"))||"").toUpperCase().trim();}catch(e){}
+  var out=[],seen={};
+  function add(c,n,extra){
+    c=String(c==null?"":c).trim();n=String(n==null?"":n).trim();
+    if(!c&&!n)return;
+    var k=(c||n).toUpperCase();
+    if(seen[k])return;
+    seen[k]=1;out.push({code:c,name:n||c,city:(extra&&extra.city)||"",state:(extra&&extra.state)||""});
+  }
+  if(who||code){
+    (distList()||[]).forEach(function(d){
+      var a=String(d.emAsm==null?"":d.emAsm).toUpperCase().replace(/\s+/g," ").trim();
+      if(!a)return;
+      if((who&&a===who)||(code&&a===code))add(d.code,d.name,d);
+    });
+    if(out.length)return out.sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
+  }
+  // master has no assignment for him → fall back to the distributors of his mapped stores
+  _dbsFromStores(empMappedStores()).forEach(function(d){add(d.code,d.name,d);});
+  if(out.length)return out.sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
   var all=distList();
   if(all&&all.length)return all.slice().sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
   return _dbsFromStores(storeList());
@@ -3699,7 +3731,39 @@ function pjpLoad(){try{return JSON.parse(localStorage.getItem(PJPKEY)||"{}");}ca
 function pjpSaveAll(o){try{localStorage.setItem(PJPKEY,JSON.stringify(o));}catch(e){toast("Storage full");}}
 function pad2(n){return (n<10?"0":"")+n;}
 function pjpEmpCode(){var c=elv("pjp_emp_code");if(c)return c;var n=elv("pjp_emp_name");return n?empCodeOf(n):"";}
-function pjpDraftKey(code,month){return code+"__"+month;}
+/* Month is ALWAYS normalised to YYYY-MM in the key. Google Sheets coerces the pushed text
+   "2026-08" into a real date and hands it back as "2026-08-01", so an un-normalised key created
+   a SECOND draft (HCPL2586__2026-08 and HCPL2586__2026-08-01) for the same month — two rows for
+   one task, which is exactly what the single-row contract must prevent. */
+function pjpMonthKey(month){return String(month==null?"":month).trim().slice(0,7);}
+function pjpDraftKey(code,month){return code+"__"+pjpMonthKey(month);}
+/* One-time repair of drafts already split across both key formats: keep the record with the
+   newest updatedAt per employee+month (that is the one carrying the latest HOD decision). */
+function pjpCollapseDraftKeys(){
+  try{
+    var all=pjpLoad(),keys=Object.keys(all),best={},drop=[];
+    if(!keys.length)return 0;
+    keys.forEach(function(k){
+      var dr=all[k];if(!dr)return;
+      var code=String(dr.code||k.split("__")[0]||"").trim();
+      var mon=pjpMonthKey(dr.month||k.split("__")[1]||"");
+      if(!code||!mon)return;
+      var nk=code+"__"+mon,u=+dr.updatedAt||0;
+      if(!best[nk]||u>best[nk].u)best[nk]={u:u,rec:dr};
+      drop.push(k);
+    });
+    var out={},changed=false;
+    drop.forEach(function(k){if(all[k]!==undefined)delete all[k];});
+    Object.keys(best).forEach(function(nk){
+      var rec=best[nk].rec;rec.month=nk.split("__")[1];
+      out[nk]=rec;changed=true;
+    });
+    Object.keys(all).forEach(function(k){out[k]=all[k];});
+    if(Object.keys(out).length!==keys.length)changed=true;
+    if(changed)pjpSaveAll(out);
+    return keys.length-Object.keys(out).length;
+  }catch(e){return 0;}
+}
 function getPjpDraft(){var code=pjpEmpCode(),month=elv("pjp_month");if(!code||!month)return null;var all=pjpLoad();var k=pjpDraftKey(code,month);if(!all[k])all[k]={code:code,month:month,beats:[],status:"Draft"};return all[k];}
 /* EVERY PJP edit funnels through here (day cells, Working-With, station, city/beat, off days),
    so this is the one place autosave needs to hook. updatedAt drives the newest-wins merge that
@@ -4037,8 +4101,49 @@ function monthShort(m){var nm=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","
 function pjpEditable(dr){var s=dr&&dr.status;return (!s||s==="Draft"||s==="Rejected");}
 function beatDates(b,month){var q=month.split("-");var y=+q[0],mo=+q[1];var dim=new Date(y,mo,0).getDate();var out=[];for(var d=1;d<=dim;d++){var dt=new Date(y,mo-1,d);var dow=dt.getDay();if(dow===0)continue;var wk=Math.floor((d-1)/7)+1;var match=false;if(b.freq==="Daily")match=true;else if(b.freq==="Weekly")match=b.days.indexOf(dow)>=0;else if(b.freq==="Fortnightly")match=(b.days.indexOf(dow)>=0)&&(wk===1||wk===3);else if(b.freq==="Monthly")match=(b.days.indexOf(dow)>=0)&&(d<=7);if(match)out.push(y+"-"+pad2(mo)+"-"+pad2(d));}return out;}
 function pjpDatesInMonth(month){var q=month.split("-");var y=+q[0],mo=+q[1];var dim=new Date(y,mo,0).getDate();var arr=[];for(var d=1;d<=dim;d++)arr.push(y+"-"+pad2(mo)+"-"+pad2(d));return arr;}
+/* ═══════════ DATE OF JOINING — no plan is asked for before a rep joined ═══════════
+   Source: "DateofJoining" in Master_Employees (and LoginConfig for people who are not in the
+   employee master, e.g. admins). A day before that date is not the rep's to plan: it is shown
+   locked in the month list, is excluded from the coverage count (otherwise the month could never
+   reach 100% and Submit would stay disabled forever), and the auto-generator skips it. */
+function empDoj(codeOrName){
+  var q=String(codeOrName==null?"":codeOrName).toUpperCase().trim();
+  if(!q)return "";
+  var hit="";
+  try{
+    ((loadMaster().employees)||[]).forEach(function(e){
+      if(hit)return;
+      if(String(e.code||"").toUpperCase().trim()===q||String(e.name||"").toUpperCase().trim()===q)hit=String(e.doj||"");
+    });
+  }catch(e){}
+  if(!hit){ // fall back to the login config (admins/HODs may not be in Master_Employees)
+    try{
+      var users=JSON.parse(localStorage.getItem("me_em_login_config")||"[]");
+      (users||[]).forEach(function(u){
+        if(hit)return;
+        if(String(u.code||"").toUpperCase().trim()===q||String(u.name||"").toUpperCase().trim()===q)hit=String(u.doj||"");
+      });
+    }catch(e){}
+  }
+  return /^\d{4}-\d{2}-\d{2}/.test(hit)?hit.slice(0,10):"";
+}
+/* true when `date` falls before that employee joined (no DOJ on record → never blocks) */
+function pjpBeforeJoin(codeOrName,date){
+  var doj=empDoj(codeOrName);
+  if(!doj||!date)return false;
+  return String(date)<doj;
+}
+/* Dates of `month` this employee is actually expected to plan (DOJ onwards). */
+function pjpPlanDates(month,codeOrName){
+  var all=pjpDatesInMonth(month);
+  var doj=empDoj(codeOrName);
+  if(!doj)return all;
+  return all.filter(function(dt){return dt>=doj;});
+}
 function pjpDayType(dr,date){var dow=new Date(date+"T00:00:00").getDay();if(dow===0)return {type:"Weekly Off"};if(dr.offDays&&dr.offDays[date])return {type:dr.offDays[date]};for(var i=0;i<dr.beats.length;i++){if(beatDates(dr.beats[i],dr.month).indexOf(date)>=0)return {type:"Beat",beat:dr.beats[i].beat};}return {type:"Unassigned"};}
-function pjpCoverage(dr){var dates=pjpDatesInMonth(dr.month);var missing=[],work=0,covered=0;dates.forEach(function(dt){if(new Date(dt+"T00:00:00").getDay()===0)return;work++;if(pjpDayType(dr,dt).type==="Unassigned")missing.push(dt);else covered++;});return {work:work,covered:covered,missing:missing};}
+/* Coverage counts only the days from the joining date onwards — a rep who joined mid-month is
+   never asked to plan the days before they existed on the rolls. */
+function pjpCoverage(dr){var dates=pjpPlanDates(dr.month,dr&&dr.code);var missing=[],work=0,covered=0;dates.forEach(function(dt){if(new Date(dt+"T00:00:00").getDay()===0)return;work++;if(pjpDayType(dr,dt).type==="Unassigned")missing.push(dt);else covered++;});return {work:work,covered:covered,missing:missing,doj:empDoj(dr&&dr.code)};}
 function pjpEditBeat(i){var dr=getPjpDraft();if(!dr||!pjpEditable(dr)){toast("Locked");return;}var b=dr.beats[i];if(!b)return;setv("pjp_state",b.state);pjpFillCities();setv("pjp_city",b.city);setv("pjp_beat",b.beat);setv("pjp_freq",b.freq);pjpFreqChange();pjpClearDays();(b.days||[]).forEach(function(dn){var btn=document.querySelector('#pjp_days .seg-btn[data-d="'+dn+'"]');if(btn)btn.classList.add("on");});dr.beats.splice(i,1);savePjpDraft(dr);renderPjpList();renderCoverage();var el=document.getElementById("pjp_beat");if(el&&el.scrollIntoView)el.scrollIntoView({behavior:"smooth",block:"center"});toast("Edit karein phir Add Beat dabayein");}
 function pjpAddOff(){var dr=getPjpDraft();if(!dr){toast("Employee + month select karein");return;}if(!pjpEditable(dr)){toast("Locked");return;}var dt=elv("pjp_off_date"),ty=elv("pjp_off_type");if(!dt){toast("Date select karein");return;}if(dt.slice(0,7)!==dr.month){toast("Ye date is month ka nahi hai");return;}if(new Date(dt+"T00:00:00").getDay()===0){toast("Sunday already Weekly Off hai");return;}if(!dr.offDays)dr.offDays={};dr.offDays[dt]=ty;savePjpDraft(dr);renderOffDays();renderCoverage();toast(ty+" marked \u2713");}
 function pjpRemoveOff(dt){var dr=getPjpDraft();if(!dr||!pjpEditable(dr)){toast("Locked");return;}if(dr.offDays)delete dr.offDays[dt];savePjpDraft(dr);renderOffDays();renderCoverage();}
@@ -4330,7 +4435,9 @@ function genMonthPjp(code,zone,month,days,offDays,status){
   return out;
 }
 function pjpDayType(dr,date){var dow=new Date(date+"T00:00:00").getDay();if(dow===0)return {type:"Weekly Off"};if(dr.offDays&&dr.offDays[date])return {type:dr.offDays[date]};var row=dr.days&&dr.days[date];if(row&&(row.city||"").trim()&&(row.beat||"").trim())return {type:"Filled"};return {type:"Unassigned"};}
-function pjpCoverage(dr){var dates=pjpDatesInMonth(dr.month);var missing=[],work=0,covered=0;dates.forEach(function(dt){if(new Date(dt+"T00:00:00").getDay()===0)return;work++;if(pjpDayType(dr,dt).type==="Unassigned")missing.push(dt);else covered++;});return {work:work,covered:covered,missing:missing};}
+/* Coverage counts only the days from the joining date onwards — a rep who joined mid-month is
+   never asked to plan the days before they existed on the rolls. */
+function pjpCoverage(dr){var dates=pjpPlanDates(dr.month,dr&&dr.code);var missing=[],work=0,covered=0;dates.forEach(function(dt){if(new Date(dt+"T00:00:00").getDay()===0)return;work++;if(pjpDayType(dr,dt).type==="Unassigned")missing.push(dt);else covered++;});return {work:work,covered:covered,missing:missing,doj:empDoj(dr&&dr.code)};}
 function pjpFillCityList(dr){var dl=document.getElementById("dl_pjp_city");if(!dl)return;var st=(dr&&empStates(dr.code)[0])||"";var cs=stateCities(st)||[];dl.innerHTML="";cs.forEach(function(c){var o=document.createElement("option");o.value=c;dl.appendChild(o);});}
 function pjpUpdateCount(){var cnt=document.getElementById("pjp_count");if(!cnt)return;var dr=getPjpDraft();if(!dr){cnt.textContent="";return;}var c=pjpCoverage(dr);cnt.textContent="("+c.covered+"/"+c.work+" days"+(dr.status&&dr.status!=="Draft"?(" \u00b7 "+dr.status):"")+")";}
 var PJP_MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -4366,7 +4473,7 @@ function renderPjpList(){
 }
 function pjpSetCell(dt,field,val){var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={city:"",beat:""};dr.days[dt][field]=val;savePjpDraft(dr);renderCoverage();pjpUpdateCount();}
 function pjpSetOff(sel){var dt=sel.getAttribute("data-dt");var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.offDays)dr.offDays={};var v=sel.value;if(v)dr.offDays[dt]=v;else delete dr.offDays[dt];savePjpDraft(dr);renderPjpList();renderCoverage();}
-function renderCoverage(){var box=document.getElementById("pjp_cov");if(!box){pjpUpdateSubmit();return;}var dr=getPjpDraft();if(!dr){box.innerHTML='<div class="note" style="margin:0">Employee + month select karein.</div>';pjpUpdateSubmit();return;}var c=pjpCoverage(dr);var pct=c.work?Math.round(c.covered/c.work*100):0;var done=(c.missing.length===0);var h='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+stat(c.covered+"/"+c.work,"Working Days")+stat(pct+"%","Filled")+stat(c.missing.length,"Pending")+'</div>';if(done){h+='<div class="note" style="margin:0;background:#eafbf0;border:1px solid #bfe3c6;color:#0f2e1d;border-radius:8px;padding:8px 10px">\u2705 Poora month plan ho gaya! Ab Save &amp; Send kar sakte ho.</div>';}else{var nm=c.missing.map(function(dt){return (+dt.slice(8,10));}).join(", ");h+='<div class="note" style="margin:0;background:#fff5f3;border:1px solid #f0c9bf;color:#8a3520;border-radius:8px;padding:8px 10px">\u26a0\ufe0f '+c.missing.length+' din pending ('+monthShort(dr.month)+' '+nm+'). Har working day me <b>City + Beat</b> bharein ya <b>Off</b> karein.</div>';}box.innerHTML=h;pjpUpdateSubmit();}
+function renderCoverage(){var box=document.getElementById("pjp_cov");if(!box){pjpUpdateSubmit();return;}var dr=getPjpDraft();if(!dr){box.innerHTML='<div class="note" style="margin:0">Employee + month select karein.</div>';pjpUpdateSubmit();return;}var c=pjpCoverage(dr);var pct=c.work?Math.round(c.covered/c.work*100):0;var done=(c.missing.length===0);var h='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+stat(c.covered+"/"+c.work,"Working Days")+stat(pct+"%","Filled")+stat(c.missing.length,"Pending")+'</div>';if(c.doj){h+='<div class="hint" style="margin:0 0 8px;background:#f1f5f9;border-left:3px solid #64748b;padding:6px 9px;border-radius:6px">Date of Joining: <b>'+ddmmyy(c.doj)+'</b> \u2014 us se pehle ke din plan me count nahi hote.</div>';}if(done){h+='<div class="note" style="margin:0;background:#eafbf0;border:1px solid #bfe3c6;color:#0f2e1d;border-radius:8px;padding:8px 10px">\u2705 Poora month plan ho gaya! Ab Save &amp; Send kar sakte ho.</div>';}else{var nm=c.missing.map(function(dt){return (+dt.slice(8,10));}).join(", ");h+='<div class="note" style="margin:0;background:#fff5f3;border:1px solid #f0c9bf;color:#8a3520;border-radius:8px;padding:8px 10px">\u26a0\ufe0f '+c.missing.length+' din pending ('+monthShort(dr.month)+' '+nm+'). Har working day me <b>City + Beat</b> bharein ya <b>Off</b> karein.</div>';}box.innerHTML=h;pjpUpdateSubmit();}
 function pjpUpdateSubmit(){var btn=document.getElementById("pjp_submit_btn");var note=document.getElementById("pjp_submit_note");var rev=document.getElementById("pjp_revise_wrap");var dr=getPjpDraft();if(!btn)return;if(!dr){btn.disabled=true;if(rev)rev.style.display="none";if(note)note.style.display="none";return;}if(rev){if(dr.status==="Accepted"||dr.status==="HOD-Approved"){rev.style.display="";rev.innerHTML='<div class="note" style="margin:0 0 6px">PJP locked hai. Change karna ho to Revise karein \u2014 approved version tab tak live rahega jab tak naya approve na ho.</div><button class="btn btn-ghost" onclick="pjpRevise()">\u270f\ufe0f Revise PJP</button>';}else rev.style.display="none";}var editable=pjpEditable(dr);if(!editable){btn.style.display="none";if(note){note.style.display="";note.innerHTML=(dr.status==="Pending")?"\u23f3 Submitted \u2014 Admin review me hai. Ab change nahi kar sakte.":"\u2705 "+dr.status+".";}return;}btn.style.display="";var c=pjpCoverage(dr);var done=(c.missing.length===0&&c.work>0);if(!done){btn.disabled=true;if(note){note.style.display="";note.textContent="\u26a0\ufe0f Poora month plan hone ke baad hi Save & Send ho payega.";}}else{btn.disabled=false;if(note)note.style.display="none";}}
 function pjpSubmit(){var dr=getPjpDraft();if(!dr){toast("Employee + month select karein");return;}if(!pjpEditable(dr)){toast("Already submitted / approved");return;}var _cov=pjpCoverage(dr);if(!_cov.work){toast("Is month koi working day nahi");return;}if(_cov.missing.length){toast("Pehle poora month plan karein ("+_cov.missing.length+" din pending)");return;}dr.status="Pending";dr.submittedAt=nowTime();savePjpDraft(dr);renderPjpList();renderCoverage();pjpNotify();var h='<div class="card" style="margin-top:13px;border-left:4px solid #C8A24B"><h2 style="color:#8a6a00"><span class="dot" style="background:#C8A24B"></span>\u23f3 Save ho gaya \u2014 Admin ko bhej diya</h2><div class="note" style="margin:0">PJP <b>Admin</b> ke paas review ke liye chala gaya. Admin (Data tab) check karke <b>HOD</b> ko bhejega. HOD approve karega tabhi master update hoga aur Plan khulega.</div></div>';var _po=document.getElementById("pjp_out");_po.innerHTML=h;if(_po.scrollIntoView)_po.scrollIntoView({behavior:"smooth",block:"start"});}
 function pjpRevise(){var dr=getPjpDraft();if(!dr)return;if(dr.status!=="Accepted"&&dr.status!=="HOD-Approved")return;dr.approvedDays=JSON.parse(JSON.stringify(dr.days||{}));dr.approvedOffDays=Object.assign({},dr.offDays||{});dr.wasApproved=true;dr.priorStatus=dr.status;dr.status="Draft";savePjpDraft(dr);renderPjpList();renderCoverage();pjpNotify();toast("Revise mode \u2014 change karke dobara Save & Send karein");}
@@ -4531,7 +4638,8 @@ function getPjpDraft(){var code=pjpEmpCode(),month=elv("pjp_month");if(!code||!m
 function genMonthPjp(code,zone,month,days,offDays,status){
   days=days||{};offDays=offDays||{};status=status||"";
   function upWk(ww){var W=String(ww||"").toUpperCase();if(W.indexOf("SICK")>=0)return "SICK LEAVE";if(W.indexOf("LEAVE")>=0)return "LEAVE";if(W.indexOf("HOLIDAY")>=0)return "HO HOLIDAY";if(W.indexOf("MEETING")>=0||W.indexOf("ACTIVITY")>=0)return "MEETING / ACTIVITY";if(W.indexOf("WEEKLY OFF")>=0)return "WEEKLY OFF";return "OFF";}
-  var dates=pjpDatesInMonth(month);var out=[];
+  // DOJ-aware: days before the employee joined are not generated at all.
+  var dates=pjpPlanDates(month,code);var out=[];
   dates.forEach(function(dt){
     var d=+dt.slice(8,10);var wk=pjpWeekOf(d);var dow=new Date(dt+"T00:00:00").getDay();
     if(dow===0){out.push({code:code,zone:zone,date:dt,ww:"Weekly Off (Sunday)",week:"OFF DAY",town:"SUNDAY",beat:"SUNDAY",focus:"OFF DAY",status:status});return;}
@@ -4541,7 +4649,7 @@ function genMonthPjp(code,zone,month,days,offDays,status){
   });
   return out;
 }
-function pjpDayType(dr,date){var dow=new Date(date+"T00:00:00").getDay();if(dow===0)return {type:"Weekly Off"};var row=(dr.days&&dr.days[date])||{};var ww=row.ww||"Self Working";if(!pjpIsField(ww))return {type:"Filled"};if((row.city||"").trim()&&(row.beat||"").trim())return {type:"Filled"};return {type:"Unassigned"};}
+function pjpDayType(dr,date){var dow=new Date(date+"T00:00:00").getDay();if(dow===0)return {type:"Weekly Off"};if(pjpBeforeJoin(dr&&dr.code,date))return {type:"Pre-Joining"};var row=(dr.days&&dr.days[date])||{};var ww=row.ww||"Self Working";if(!pjpIsField(ww))return {type:"Filled"};if((row.city||"").trim()&&(row.beat||"").trim())return {type:"Filled"};return {type:"Unassigned"};}
 function pjpSetWw(sel){var dt=sel.getAttribute("data-dt");var dr=getPjpDraft();if(!dr||!pjpEditable(dr))return;if(!dr.days)dr.days={};if(!dr.days[dt])dr.days[dt]={ww:"Self Working",city:"",beat:""};dr.days[dt].ww=sel.value;savePjpDraft(dr);renderPjpList();renderCoverage();}
 /* Per-day Station for TA/DA: manual pick wins; else auto (city vs HQ distance); never "Unknown". */
 function pjpEffStation(dr,dt){
@@ -4683,8 +4791,19 @@ function renderPjpList(){
   pjpFillCityList(dr);
   var lock=!pjpEditable(dr);var dates=pjpDatesInMonth(dr.month);
   var dn=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];var moAbbr=PJP_MON[(+dr.month.split("-")[1])-1];var h="";
+  var _doj=empDoj(dr.code);
   dates.forEach(function(dt){
     var d=+dt.slice(8,10);var wk=pjpWeekOf(d);var dow=new Date(dt+"T00:00:00").getDay();var sun=(dow===0);
+    // Before the joining date there is nothing to plan — show the day locked, never editable,
+    // and it is already excluded from the coverage count (see pjpCoverage).
+    if(_doj&&dt<_doj){
+      h+='<div style="border:1px dashed #dfe5e2;border-radius:10px;padding:8px 10px;margin-bottom:7px;background:#f8fafc;opacity:.85">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">'
+        +'<span style="font-weight:700;font-size:12.5px;color:#64748b">'+pad2(d)+' '+moAbbr+' <span class="hint" style="font-weight:400">'+dn[dow]+'</span></span>'
+        +'<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:#e2e8f0;color:#475569">Joining se pehle</span>'
+        +'</div><div class="hint" style="margin-top:3px">Employee ne '+ddmmyy(_doj)+' ko join kiya — is din ka plan required nahi.</div></div>';
+      return;
+    }
     var row=(dr.days&&dr.days[dt])||{};var ww=row.ww||(sun?"Weekly Off (Sunday)":"Self Working");
     var field=pjpIsField(ww)&&!sun;var odd=(wk%2===1);var wkTxt=sun?"OFF DAY":("WK-"+wk);
     var bg=sun?"#faf7ee":(field?"#fff":"#fff5f3");
@@ -9157,9 +9276,13 @@ function autoTouchDay(code,date){
   _autoDayKeys[code+"|"+date]=1;
   autoTouch("day");
 }
+var _autoDayBusy=false;
 autoRegister("day",function(){
   var keys=Object.keys(_autoDayKeys);_autoDayKeys={};
   if(!keys.length||!(window.__sync&&window.__sync.push))return null;
+  // Never let two day-record pushes overlap: the backend reads existing rows once per request,
+  // so concurrent pushes of the same Id would each append instead of upserting.
+  if(_autoDayBusy){keys.forEach(function(k){_autoDayKeys[k]=1;});return null;}
   var db=(typeof load==="function")?load():{};
   var rows=[];
   keys.forEach(function(k){
@@ -9174,7 +9297,9 @@ autoRegister("day",function(){
                EodJson:JSON.stringify(rec),Ts:rec.eodTime||rec.planTime||nowTime()});
   });
   if(!rows.length)return null;
-  return window.__sync.push("EOD",rows,"Id");
+  _autoDayBusy=true;
+  return window.__sync.push("EOD",rows,"Id").then(function(res){_autoDayBusy=false;return res;},
+                                                 function(e){_autoDayBusy=false;return {ok:false,error:String(e)};});
 });
 /* ---- Task 3: half-finished FORMS → local drafts only ----
    These are deliberately NOT pushed to the sheet: an unsubmitted order/store would land as a
@@ -9273,6 +9398,11 @@ function renderMasterSource(){
         +'<br><span class="hint">Pakka fix: master Excel ko app ke Data tab se dobara upload karo (wo header-wise likhta hai), ya sheet ka header row data ke order me kar do.</span></div>';
     }
     if(al&&al.stores)h+='<div style="margin-top:4px">🗺️ '+al.mappedStores+' / '+al.stores+' stores kisi real salesman se mapped hain (EmAsm)</div>';
+    // Duplicate PJP rows in the sheet (same employee+date more than once)
+    var dup=cache&&cache._pjpDupes;
+    if(dup)h+='<div style="margin-top:5px;color:#92400e;background:#fffbeb;border-left:3px solid #d97706;padding:6px 9px;border-radius:6px">'
+      +'⚠️ Master_PJP me <b>'+dup+' duplicate row</b> hain (same employee + same date). App pehli row use karta hai, baaki ignore. '
+      +'<span class="hint">Sheet me se extra rows delete kar do — app ab Master tabs me kuch nahi likhta.</span></div>';
   }catch(e){}
   // How many of the sheet's stores are mapped to the logged-in salesman (EmAsm) — the number
   // that actually decides the Field-tab store list and the New-Store distributor picker.
@@ -9621,11 +9751,12 @@ function drAddPurgeRule(target,cutoff){
   if(target.all){
     var gv=drNextDay(cutoff),old=String(m.config.Purge_Before||"");
     if(old&&old>gv)gv=old;                       // never shrink an existing wider purge
+    /* Master_Config is a read-only master tab, so the rule is stored LOCALLY and the exact value
+       to paste is reported back. Add that one row to Master_Config yourself and the rule then
+       propagates to every device on their next pull (the app reads it, it just never writes it). */
     m.config.Purge_Before=gv;saveMaster(m);
-    if(!(window.__sync&&window.__sync.push))return Promise.resolve({ok:false,value:"Purge_Before="+gv,error:"sync off"});
-    return window.__sync.push("Master_Config",[{Key:"Purge_Before",Value:gv}],"Key").then(function(res){
-      return {ok:!!(res&&res.ok),value:"Purge_Before = "+gv,error:(res&&res.error)||""};
-    });
+    return Promise.resolve({ok:false,manual:true,value:"Purge_Before = "+gv,
+      error:"Master_Config read-only — ye row sheet me khud add karo"});
   }
   var cur=String(m.config.Purge_Emp_Before||"");
   var parts=cur?cur.split(/[,;\n]+/).map(function(s){return s.trim();}).filter(Boolean):[];
@@ -9642,10 +9773,8 @@ function drAddPurgeRule(target,cutoff){
   if(!replaced)out.push(mine);
   var val=out.join(", ");
   m.config.Purge_Emp_Before=val;saveMaster(m);
-  if(!(window.__sync&&window.__sync.push))return Promise.resolve({ok:false,value:val,error:"sync off"});
-  return window.__sync.push("Master_Config",[{Key:"Purge_Emp_Before",Value:val}],"Key").then(function(res){
-    return {ok:!!(res&&res.ok),value:val,error:(res&&res.error)||""};
-  });
+  return Promise.resolve({ok:false,manual:true,value:"Purge_Emp_Before = "+val,
+    error:"Master_Config read-only — ye row sheet me khud add karo"});
 }
 function drSyncReady(){
   if(window.__sync&&window.__sync.pullSheet&&window.__sync.replaceSheet)return true;
@@ -9700,8 +9829,8 @@ function drDeleteApply(){
     var loc=drDeleteLocal(t,cutoff);
     log.push('🧹 Is device se '+loc+' local records hataye');
     return drAddPurgeRule(t,cutoff).then(function(pr){
-      log.push(pr.ok?('📌 Purge rule sheet me set: <b>'+escapeHtml(pr.value)+'</b> — baaki devices next sync par khud clean ho jayenge aur ye rows dobara upload nahi honge.')
-                   :('⚠️ Purge rule local me set hai par sheet me nahi gaya ('+escapeHtml(pr.error)+') — Master_Config me <b>Purge_Emp_Before = '+escapeHtml(pr.value)+'</b> khud add kar do.'));
+      log.push('📌 Purge rule is device par set ho gaya: <b>'+escapeHtml(pr.value)+'</b>'
+        +'<br><span class="hint">Master_Config <b>read-only</b> hai (aapka source of truth) — ye ek row sheet ke Master_Config tab me khud add kar do, phir baaki sab devices next sync par khud clean ho jayenge aur ye rows dobara upload nahi hongi.</span>');
       log.push('<b>Total sheet rows deleted: '+sheetDel+'</b>'+(fail?(' · '+fail+' sheet(s) fail/queued — dobara chalao'):''));
       if(out)out.innerHTML='<div style="font-size:11.5px;line-height:1.7">'+log.join("<br>")+'</div>';
       try{renderSoTracker();renderNsTracker();renderFfList();refreshPendingBanners();if(typeof renderSaList==="function")renderSaList();if(typeof renderReqList==="function")renderReqList();}catch(e){}
@@ -12290,6 +12419,7 @@ function tadaFillClaimDesigDropdown(){
         pwd:String(r.Password||""),
         rights:r.Rights||"Employee",
         status:r.Status||"Active",
+        doj:pullDateToISO(r.DateofJoining||r["Date of Joining"]||r.DOJ||""),
         pwdChanged:(r.PwdChanged===true||r.PwdChanged==="TRUE"||r.PwdChanged==="true"),
         lastUpdated:r.LastUpdated||""
       };
@@ -12412,7 +12542,7 @@ function tadaFillClaimDesigDropdown(){
     }
     // Employees
     if(remote.Master_Employees&&remote.Master_Employees.length){
-      m.employees=remote.Master_Employees.map(function(r){return {code:r.Code,name:r.Name,hq:r.HQ,zone:r.Zone,desig:r.Designation,mob:String(r.Mobile||""),email:r.Email,rights:r.Rights,status:r.Status,hod:{name:r.HodName||"",mob:String(r.HodMobile||""),email:r.HodEmail||""},zm:{name:r.ZmName||"",mob:String(r.ZmMobile||""),email:r.ZmEmail||""},rsm:{name:r.RsmName||"",mob:String(r.RsmMobile||""),email:r.RsmEmail||""},asm:{name:r.AsmName||"",mob:String(r.AsmMobile||""),email:r.AsmEmail||""}};});
+      m.employees=remote.Master_Employees.map(function(r){return {code:r.Code,name:r.Name,hq:r.HQ,zone:r.Zone,desig:r.Designation,mob:String(r.Mobile||""),email:r.Email,rights:r.Rights,status:r.Status,doj:pullDateToISO(r.DateofJoining||r["Date of Joining"]||r.DOJ||""),hod:{name:r.HodName||"",mob:String(r.HodMobile||""),email:r.HodEmail||""},zm:{name:r.ZmName||"",mob:String(r.ZmMobile||""),email:r.ZmEmail||""},rsm:{name:r.RsmName||"",mob:String(r.RsmMobile||""),email:r.RsmEmail||""},asm:{name:r.AsmName||"",mob:String(r.AsmMobile||""),email:r.AsmEmail||""}};});
     }
     // Products
     if(remote.Master_Products&&remote.Master_Products.length){
@@ -12437,8 +12567,23 @@ function tadaFillClaimDesigDropdown(){
                 stores:(m.stores||[]).length,distributors:(m.distributors||[]).length};
     }catch(e){}
     // PJP (daily beat plan) — CRITICAL: without this, employees see blank PJP tab
+    /* DE-DUPLICATE by employee+date, keeping the FIRST row the sheet returns. The tab had picked
+       up extra rows for the same code+date (50 of them for one rep) from the app's old Master_PJP
+       push, with uppercased beats and a defaulted Ww — so a lookup could land on the wrong variant
+       and show a stale plan. The customer's own rows come first in sheet order, so first-wins keeps
+       their data and drops the leftovers. (App writes to Master_* are now blocked outright; this
+       keeps existing duplicates harmless until they clean the tab.) */
     if(remote.Master_PJP&&remote.Master_PJP.length){
-      m.pjp=remote.Master_PJP.map(function(r){return {code:r.Code,zone:r.Zone,date:pullDateToISO(r.Date),week:r.Week,town:r.Town,beat:r.Beat,focus:r.Focus,ww:r.Ww||"",status:r.Status||""};});
+      var _seenPjp={},_dupPjp=0;
+      m.pjp=remote.Master_PJP.map(function(r){
+        return {code:r.Code,zone:r.Zone,date:pullDateToISO(r.Date),week:r.Week,town:r.Town,beat:r.Beat,focus:r.Focus,ww:r.Ww||"",status:r.Status||""};
+      }).filter(function(p){
+        var k=String(p.code||"").toUpperCase().trim()+"|"+String(p.date||"");
+        if(k==="|")return true;
+        if(_seenPjp[k]){_dupPjp++;return false;}
+        _seenPjp[k]=1;return true;
+      });
+      m._pjpDupes=_dupPjp;
     }
     // Phasing targets
     if(remote.Master_Phasing&&remote.Master_Phasing.length){
@@ -12712,11 +12857,18 @@ function tadaFillClaimDesigDropdown(){
     if(remote.PJP_Drafts&&remote.PJP_Drafts.length&&typeof pjpLoad==="function"){
       var all=pjpLoad();var changed=false;
       remote.PJP_Drafts.forEach(function(r){
-        var key=r.Key||((r.EmpCode||"")+"__"+(r.Month||""));if(!key||key==="__")return;
+        // Normalise the month part: the sheet may hand back "2026-08-01" for a pushed "2026-08"
+        // (Sheets turns it into a date), and two spellings would mean two local drafts.
+        var _code=String(r.EmpCode||"").trim();
+        var _mon=String(r.Month||"").trim().slice(0,7);
+        if(!_mon&&r.Key){var _kp=String(r.Key).split("__");_mon=_kp[1]?String(_kp[1]).slice(0,7):"";}
+        var key=(_code&&_mon)?(_code+"__"+_mon):String(r.Key||"");
+        key=key.replace(/__(\d{4}-\d{2})-\d{2}$/,"__$1");
+        if(!key||key==="__")return;
         var loc=all[key];var rUpd=+r.UpdatedAt||0;var lUpd=(loc&&+loc.updatedAt)||0;
         if(loc&&lUpd>=rUpd)return;
         var days={},rej=[];try{days=JSON.parse(r.DaysJson||"{}");}catch(e){}try{rej=JSON.parse(r.RejectedDaysJson||"[]");}catch(e){}
-        all[key]={code:r.EmpCode,month:r.Month,status:r.Status||"",submittedAt:r.SubmittedAt||"",hodAt:r.HodAt||"",rejectReason:r.RejectReason||"",rejectedDays:rej,days:days,windowOpenUntil:r.WindowOpenUntil||"",updatedAt:rUpd,sentToHod:(r.Status==="Pending"),wasApproved:(r.Status==="HOD-Approved")};
+        all[key]={code:r.EmpCode,month:_mon||String(r.Month||"").slice(0,7),status:r.Status||"",submittedAt:r.SubmittedAt||"",hodAt:r.HodAt||"",rejectReason:r.RejectReason||"",rejectedDays:rej,days:days,windowOpenUntil:r.WindowOpenUntil||"",updatedAt:rUpd,sentToHod:(r.Status==="Pending"),wasApproved:(r.Status==="HOD-Approved")};
         changed=true;
       });
       if(changed)try{pjpSaveAll(all);}catch(e){}
@@ -12807,7 +12959,20 @@ function tadaFillClaimDesigDropdown(){
   }
 
   // ─── Core: push (with queue for offline) ─────────────────────
+  /* ─── MASTER TABS ARE READ-ONLY ──────────────────────────────────────────────
+     Master_* tabs are the customer's source of truth: the app READS them and must never write
+     a single cell. App writes had been appending duplicate Master_PJP rows (30 duplicated
+     code+date pairs for one rep, with normalised/uppercased beats), which is exactly how a
+     "wrong/old PJP" ended up showing against that rep. This is a hard gate at the transport
+     layer, not just at the call sites, so no present or future code path can bypass it. */
+  function isMasterSheet(name){return /^master/i.test(String(name||"").trim());}
+  function blockMasterWrite(sheet,how){
+    try{console.warn("[GARUDA] blocked "+how+" to read-only master tab: "+sheet);}catch(e){}
+    return Promise.resolve({ok:false,blocked:true,sheet:sheet,
+      error:"Master_* tabs are read-only — sheet me changes aap khud karo"});
+  }
   function pushRows(sheet,rows,upsertKey){
+    if(isMasterSheet(sheet))return blockMasterWrite(sheet,"push");
     var email=currentUserEmail();
     if(!email)return Promise.resolve({ok:false,error:"no email"});
     var payload={action:"push",email:email,sheet:sheet,rows:rows,upsertKey:upsertKey||null};
@@ -12833,6 +12998,7 @@ function tadaFillClaimDesigDropdown(){
     }).catch(function(e){return {ok:false,sheet:sheet,error:String(e),rows:[]};});
   }
   function replaceSheetRemote(sheet,rows){
+    if(isMasterSheet(sheet))return blockMasterWrite(sheet,"replaceSheet");
     var email=currentUserEmail();
     if(!email)return Promise.resolve({ok:false,error:"no email"});
     var payload={action:"replaceSheet",email:email,sheet:sheet,rows:rows};
@@ -12886,6 +13052,12 @@ function tadaFillClaimDesigDropdown(){
   // ─── Drain queue when back online ───────────────────────────
   function drainQueue(){
     var q=loadQueue();if(!q.length)return Promise.resolve({ok:true,drained:0});
+    // Drop any Master_* write that was queued BEFORE the tabs became read-only — otherwise the
+    // offline queue would still replay it on the next sync.
+    var dropped=0;
+    q=q.filter(function(op){if(op&&isMasterSheet(op.sheet)){dropped++;return false;}return true;});
+    if(dropped){try{saveQueue(q);console.warn("[GARUDA] dropped "+dropped+" queued master write(s)");}catch(e){}}
+    if(!q.length)return Promise.resolve({ok:true,drained:0,dropped:dropped});
     var kept=[],drained=0;
     return q.reduce(function(chain,op){
       return chain.then(function(){
@@ -12997,7 +13169,27 @@ function tadaFillClaimDesigDropdown(){
   // ─── Hook: after Admin uploads Master xlsx → push to remote ─
   // We wrap saveMaster (called AFTER xlsx parse completes) instead of uploadMaster
   // (which returns before FileReader finishes) — so the data is guaranteed populated.
+  /* DISABLED — the Excel upload now updates only this device's local copy.
+     Master_* tabs belong to the customer and are the source of truth; the app must not write
+     them (its local copy is normalised, so pushing it back changed casing, defaulted Ww and
+     duplicated rows). To change master data, edit the Google Sheet directly — the app picks it
+     up on the next pull / "Refresh Masters from Sheet". */
   function hookMasterUpload(){
+    var orig=window.saveMaster;
+    if(typeof orig!=="function")return;
+    window.saveMaster=function(m){
+      var res=orig.apply(this,arguments);
+      setTimeout(function(){
+        try{
+          setStatus("idle","📚 Master local only — sheet read-only");
+          var st=document.getElementById("master-status");
+          if(st)st.textContent="✅ Local master updated. NOTE: Master_* sheet tabs are read-only — sheet me changes khud karo, app wahi se padhta hai.";
+        }catch(e){}
+      },300);
+      return res;
+    };
+  }
+  function _hookMasterUpload_disabled(){
     var orig=window.saveMaster;
     if(typeof orig!=="function")return;
     window.saveMaster=function(m){
@@ -13093,11 +13285,18 @@ function tadaFillClaimDesigDropdown(){
   }
   // Re-push ONLY Master_PJP (used after a plan deviation is created/approved/rejected so
   // the sheet's tracking columns stay current without re-pushing every master sheet).
+  /* DISABLED — Master_PJP is read-only now.
+     This used to re-push the whole PJP master after a deviation was created/approved/rejected.
+     Because the local master is a NORMALISED copy (uppercased beats, Ww defaulted to
+     "Self Working", dates reformatted), every push appended a second variant of rows that
+     already existed → duplicate code+date rows and a stale plan showing for the rep.
+     The plan-change trail still reaches the sheet through the Deviations tab, which the app
+     owns; Master_PJP itself is maintained by the customer. */
   function pushMasterPjpNow(){
+    return Promise.resolve({ok:false,skipped:true,reason:"Master_PJP is read-only"});
+  }
+  function _pushMasterPjpNow_disabled(){
     try{
-      // Backend replaceSheet is Admin/HOD-only — don't let a rep queue a failing job.
-      // The rep's changed fields still reach the sheet via the Deviations push; the HOD's
-      // approve/reject (from a privileged device) writes the enriched Master_PJP.
       if(typeof sessionIsAdminHod==="function"&&!sessionIsAdminHod())return Promise.resolve({ok:false,skipped:true});
       var m=(typeof readLocalMaster==="function")?readLocalMaster():null;
       if(!m||!m.pjp||!m.pjp.length)return Promise.resolve({ok:false});
